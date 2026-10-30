@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EDF2F5">
+<title>Locus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF2F5; --grid:#DCE5EC; --grid-major:#C3D3DF; --axis:#8DA3B6;
+  --ink:#1E3550; --muted:#556B80; --card:#F7FAFC; --veil:rgba(237,242,245,.62);
+  --c1:#C8283A; --c2:#2563A8; --c3:#6B3FA0; --c4:#1F7A5A; --c5:#A86A12; --c6:#0F7C8C;
+  --ball-edge:#EDF2F5;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E2236; --grid:#163049; --grid-major:#21425F; --axis:#4F7193;
+    --ink:#E6EEF5; --muted:#9AB0C4; --card:#122A41; --veil:rgba(14,34,54,.62);
+    --c1:#FF6B7A; --c2:#6FB1FF; --c3:#B892FF; --c4:#4FD1A1; --c5:#F4C35A; --c6:#49D3E0;
+    --ball-edge:#DCE6EF;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E2236; --grid:#163049; --grid-major:#21425F; --axis:#4F7193;
+  --ink:#E6EEF5; --muted:#9AB0C4; --card:#122A41; --veil:rgba(14,34,54,.62);
+  --c1:#FF6B7A; --c2:#6FB1FF; --c3:#B892FF; --c4:#4FD1A1; --c5:#F4C35A; --c6:#49D3E0;
+  --ball-edge:#DCE6EF;
+  color-scheme: dark;
+}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{
+  height:100%;margin:0;overflow:hidden;overscroll-behavior:none;
+  background:var(--paper);color:var(--ink);
+  font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+}
+canvas{position:fixed;top:0;left:0;width:100%;height:66.667%;display:block;touch-action:none}
+.pad{
+  position:fixed;left:0;right:0;bottom:0;top:66.667%;z-index:1;touch-action:none;
+  background-color:var(--card);
+  background-image:radial-gradient(var(--grid-major) 1.2px, transparent 1.6px);
+  background-size:18px 18px;background-position:center;
+  border-top:1.5px solid var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  padding-bottom:env(safe-area-inset-bottom,0px);overflow:hidden;
+}
+.padhint{font-family:"STIX Two Text",Georgia,serif;font-style:italic;font-size:18px;color:var(--muted);pointer-events:none;background:var(--card);padding:2px 10px;border-radius:6px}
+.padtouch{position:absolute;left:0;top:0;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;border:2px solid var(--ink);opacity:0;pointer-events:none;transition:opacity .15s}
+.padtouch.on{opacity:.55}
+
+.hud{
+  position:fixed;top:0;left:0;right:0;z-index:2;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 0;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  pointer-events:none;opacity:0;transition:opacity .3s;
+}
+.hud.on{opacity:1}
+.hud .lvl{font-family:"STIX Two Text",Georgia,serif;font-style:italic;font-weight:600;font-size:24px;line-height:1.1}
+.hud .sub{display:block;font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-style:normal;font-weight:400;font-size:13px;color:var(--muted);margin-top:2px}
+.hud .right{display:flex;gap:12px;align-items:flex-start;text-align:right}
+.hud .time{font-size:24px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.pause{
+  pointer-events:auto;width:40px;height:40px;border-radius:50%;
+  border:1.5px solid var(--ink);background:var(--card);color:var(--ink);
+  font:700 14px/1 "Atkinson Hyperlegible",system-ui,sans-serif;cursor:pointer;
+}
+.pause:focus-visible,.btn:focus-visible,.check input:focus-visible{outline:3px solid var(--c2);outline-offset:3px}
+
+.overlay{
+  position:fixed;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
+  padding:calc(env(safe-area-inset-top,0px) + 24px) 20px calc(env(safe-area-inset-bottom,0px) + 24px);
+  background:var(--veil);overflow-y:auto;
+}
+.overlay[hidden]{display:none}
+.card{
+  width:100%;max-width:360px;background:var(--card);
+  border:1.5px solid var(--ink);border-radius:8px;padding:26px 24px 22px;
+  box-shadow:6px 6px 0 var(--grid-major);
+}
+.card h1{
+  margin:0 0 4px;font-family:"STIX Two Text",Georgia,serif;font-style:italic;font-weight:600;
+  font-size:58px;line-height:1;letter-spacing:-.01em;
+}
+.card .tag{margin:0 0 18px;font-family:"STIX Two Text",Georgia,serif;font-style:italic;font-size:17px;color:var(--muted)}
+.card h2{margin:0 0 6px;font-family:"STIX Two Text",Georgia,serif;font-weight:600;font-size:30px;line-height:1.15}
+.card p{margin:0 0 12px;font-size:16px;line-height:1.5}
+.card .small{font-size:14px;color:var(--muted)}
+.card .eq{font-family:"STIX Two Text",Georgia,serif;font-style:italic;font-size:20px;margin-bottom:14px;color:var(--c1)}
+.check{display:flex;gap:10px;align-items:center;margin:16px 0 18px;font-size:15px;cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--ink);margin:0}
+.settings{margin:16px 0 18px;display:grid;gap:14px}
+.setlabel{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;margin-bottom:6px}
+.setlabel b{font-variant-numeric:tabular-nums}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid var(--ink);border-radius:8px;overflow:hidden}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;text-align:center;padding:9px 4px;font-size:15px}
+.seg label + label span{border-left:1.5px solid var(--ink)}
+.seg input:checked + span{background:var(--ink);color:var(--paper);font-weight:700}
+.seg input:focus-visible + span{outline:3px solid var(--c2);outline-offset:-3px}
+input[type="range"]{width:100%;accent-color:var(--ink);margin:0;height:28px}
+input[type="range"]:focus-visible{outline:3px solid var(--c2);outline-offset:3px}
+.btn{
+  display:block;width:100%;padding:15px 20px;border:none;border-radius:8px;cursor:pointer;
+  background:var(--ink);color:var(--paper);font:700 18px/1 "Atkinson Hyperlegible",system-ui,sans-serif;
+}
+.btn:active{transform:translateY(1px)}
+.btn[hidden],.btn2[hidden]{display:none}
+.btn2{
+  display:block;width:100%;margin-top:10px;padding:13px 20px;border:1.5px solid var(--ink);border-radius:8px;cursor:pointer;
+  background:transparent;color:var(--ink);font:700 17px/1 "Atkinson Hyperlegible",system-ui,sans-serif;
+}
+.txt{
+  display:block;width:100%;padding:12px;margin:0 0 12px;border:1.5px solid var(--ink);border-radius:8px;
+  background:var(--paper);color:var(--ink);font:400 17px "Atkinson Hyperlegible",system-ui,sans-serif;
+}
+.row{display:flex;gap:8px;align-items:stretch}
+.row .txt{margin:0;flex:1;text-transform:uppercase;letter-spacing:.12em}
+.row .btn2{width:auto;margin:0}
+.code{font-family:"STIX Two Text",Georgia,serif;font-weight:600;font-size:46px;letter-spacing:.14em;margin:0 0 4px}
+.plist{list-style:none;margin:12px 0;padding:0;border-top:1px solid var(--grid-major)}
+.plist li{padding:9px 2px;border-bottom:1px solid var(--grid-major);font-size:16px;font-variant-numeric:tabular-nums}
+.err{color:var(--c1);min-height:1.2em;margin:8px 0 0}
+.btn2:focus-visible,.txt:focus-visible{outline:3px solid var(--c2);outline-offset:2px}
+
+.toast{
+  position:fixed;left:50%;top:36%;z-index:2;transform:translate(-50%,-50%);
+  text-align:center;pointer-events:none;opacity:0;transition:opacity .35s;
+  font-family:"STIX Two Text",Georgia,serif;font-style:italic;font-weight:600;font-size:44px;
+}
+.toast small{display:block;font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-style:normal;font-weight:400;font-size:15px;color:var(--muted)}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Game area"></canvas>
+<div class="pad" id="pad" aria-label="Swipe area"><span class="padhint">Swipe here to move</span><span class="padtouch" id="padTouch"></span></div>
+
+<div class="hud" id="hud">
+  <div class="lvl"><span id="lvl">Level 1</span><span class="sub" id="spd">Speed 1.00×</span><span class="sub" id="balls"></span><span class="sub" id="alive"></span></div>
+  <div class="right">
+    <div><div class="time" id="time">0.0 s</div><span class="sub" id="best"></span><span class="sub" id="lives"></span></div>
+    <button class="pause" id="pause" aria-label="Pause">II</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<div class="overlay" id="start">
+  <div class="card">
+    <h1>Locus</h1>
+    <p class="tag">dodge the curves</p>
+    <p>Swipe in the bottom area to steer your white dot. Colored balls travel along real curves: e<sup>x</sup>, ln&nbsp;x, parabolas, cycloids, spirals and more. Don’t let one touch you.</p>
+    <p class="small">Every 12 seconds the level goes up and the balls move faster.</p>
+    <div id="startSlot">
+      <div class="settings" id="settings">
+        <div>
+          <span class="setlabel" id="linesLabel">Curve lines</span>
+          <div class="seg" role="radiogroup" aria-labelledby="linesLabel">
+            <label><input type="radio" name="lines" value="off"><span>Off</span></label>
+            <label><input type="radio" name="lines" value="ahead" checked><span>Ahead</span></label>
+            <label><input type="radio" name="lines" value="full"><span>Full</span></label>
+          </div>
+        </div>
+        <div>
+          <label class="setlabel" for="maxBalls">Max balls at a time <b id="maxBallsVal">25</b></label>
+          <input type="range" id="maxBalls" min="3" max="60" step="1" value="25">
+        </div>
+        <div>
+          <label class="setlabel" for="swipeSpeed">Swipe speed <b id="swipeVal">1.6×</b></label>
+          <input type="range" id="swipeSpeed" min="1" max="3" step="0.1" value="1.6">
+        </div>
+        <div>
+          <label class="setlabel" for="livesIn">Lives <b id="livesVal">3</b></label>
+          <input type="range" id="livesIn" min="1" max="5" step="1" value="3">
+        </div>
+        <label class="check" style="margin:0"><input type="checkbox" id="showEq"> Show equations on the graph</label>
+      </div>
+    </div>
+    <button class="btn" id="startBtn">Start</button>
+    <button class="btn2" id="mpBtn" hidden>Play with friends</button>
+    <p class="small" id="mpNote" hidden style="margin:12px 0 0">Playing with friends online works in the Locus Android app.</p>
+    <p class="small" id="startBest" style="margin:12px 0 0"></p>
+  </div>
+</div>
+
+<div class="overlay" id="paused" hidden>
+  <div class="card">
+    <h2>Paused</h2>
+    <p class="small">Your run is waiting.</p>
+    <div id="pauseSlot"></div>
+    <button class="btn" id="resumeBtn">Resume</button>
+  </div>
+</div>
+
+<div class="overlay" id="lobby" hidden>
+  <div class="card">
+    <h2>Play with friends</h2>
+    <div id="lobbyJoin">
+      <label class="setlabel" for="nick">Your name</label>
+      <input class="txt" id="nick" maxlength="16" autocomplete="nickname" placeholder="Your name">
+      <button class="btn" id="createBtn">Create a game</button>
+      <p class="small" style="margin:16px 0 8px">Or join a friend’s game:</p>
+      <div class="row">
+        <input class="txt" id="codeIn" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="Code" aria-label="Game code">
+        <button class="btn2" id="joinBtn">Join</button>
+      </div>
+    </div>
+    <div id="lobbyRoom" hidden>
+      <p class="small" style="margin:0">Game code</p>
+      <p class="code" id="codeOut"></p>
+      <p class="small">Send this code to your friends. They open this same game link, tap <b>Play with friends</b>, and join with the code.</p>
+      <ul class="plist" id="plist"></ul>
+      <div id="hostCtl" hidden>
+        <label class="setlabel" for="mPlayers">Players needed to start <b id="mPlayersVal">2</b></label>
+        <input type="range" id="mPlayers" min="2" max="8" step="1" value="2">
+        <div style="height:12px"></div>
+        <label class="setlabel" for="mLives">Lives for everyone <b id="mLivesVal">3</b></label>
+        <input type="range" id="mLives" min="1" max="5" step="1" value="3">
+      </div>
+      <button class="btn" id="mStart" hidden style="margin-top:14px">Start game</button>
+      <p class="small" id="waitMsg">Waiting for the host to start…</p>
+    </div>
+    <p class="small err" id="lobbyErr"></p>
+    <button class="btn2" id="lobbyBack">Back</button>
+  </div>
+</div>
+
+<div class="overlay" id="results" hidden>
+  <div class="card">
+    <h2 id="resTitle">Results</h2>
+    <ol class="plist" id="resList"></ol>
+    <button class="btn" id="resAgain" hidden>Play again</button>
+    <p class="small" id="resWait">Waiting for the host to start the next round…</p>
+    <button class="btn2" id="resLeave">Leave game</button>
+  </div>
+</div>
+
+<div class="overlay" id="over" hidden>
+  <div class="card">
+    <h2 id="overTitle">Hit</h2>
+    <p class="eq" id="overEq"></p>
+    <p id="overText"></p>
+    <div id="overSlot"></div>
+    <button class="btn" id="againBtn">Play again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const gridCv = document.createElement('canvas');
+const gctx = gridCv.getContext('2d');
+const $ = id => document.getElementById(id);
+const ui = {
+  hud:$('hud'), lvl:$('lvl'), spd:$('spd'), time:$('time'), best:$('best'), pause:$('pause'),
+  start:$('start'), over:$('over'), paused:$('paused'), toast:$('toast'),
+  startBtn:$('startBtn'), againBtn:$('againBtn'), resumeBtn:$('resumeBtn'),
+  settings:$('settings'), maxBalls:$('maxBalls'), maxBallsVal:$('maxBallsVal'), balls:$('balls'),
+  startSlot:$('startSlot'), pauseSlot:$('pauseSlot'), overSlot:$('overSlot'),
+  overTitle:$('overTitle'), overEq:$('overEq'), overText:$('overText'),
+  startBest:$('startBest'), lives:$('lives'), alive:$('alive'),
+  mpBtn:$('mpBtn'), lobby:$('lobby'), lobbyJoin:$('lobbyJoin'), lobbyRoom:$('lobbyRoom'), nick:$('nick'),
+  createBtn:$('createBtn'), codeIn:$('codeIn'), joinBtn:$('joinBtn'), codeOut:$('codeOut'), plist:$('plist'),
+  hostCtl:$('hostCtl'), mLives:$('mLives'), mLivesVal:$('mLivesVal'), mStart:$('mStart'), waitMsg:$('waitMsg'),
+  lobbyErr:$('lobbyErr'), lobbyBack:$('lobbyBack'),
+  results:$('results'), resTitle:$('resTitle'), resList:$('resList'), resAgain:$('resAgain'), resWait:$('resWait'), resLeave:$('resLeave')
+};
+
+let R = Math.random;          // every random choice in the game goes through R
+const rand = (a,b) => a + R()*(b-a);
+const randInt = (a,b) => Math.floor(rand(a, b+1));
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const LEVEL_SECONDS = 12;
+
+let W=0, H=0, DPR=1, diag=1, minDim=1, S=1;
+let RW=0, RH=0, VK=1, VX=0, VY=0;   // real canvas size, and how the game world is fitted into it
+let C = {};
+
+/* ---------- colours & graph paper ---------- */
+let U = 48;   // pixels per 1 unit on the graph paper (kept even)
+let OX = 0, OY = 0;   // screen position of the origin O, on a pixel centre so the axes are crisp
+const MINUS = '\u2212';
+function readColors(){
+  const s = getComputedStyle(document.documentElement);
+  const g = n => s.getPropertyValue(n).trim();
+  C = { paper:g('--paper'), grid:g('--grid'), gridMajor:g('--grid-major'), axis:g('--axis'), ink:g('--ink'),
+        beads:[g('--c1'),g('--c2'),g('--c3'),g('--c4'),g('--c5'),g('--c6')], ballEdge:g('--ball-edge') };
+}
+const tickText = n => (n < 0 ? MINUS : '') + Math.abs(n);
+function drawGrid(){
+  gridCv.width = cv.width; gridCv.height = cv.height;
+  gctx.setTransform(1,0,0,1,0,0);
+  gctx.fillStyle = C.paper; gctx.fillRect(0,0,gridCv.width,gridCv.height);
+  gctx.setTransform(DPR*VK,0,0,DPR*VK,DPR*VX,DPR*VY);
+  if (VX > .5 || VY > .5){ gctx.strokeStyle = C.axis; gctx.lineWidth = 1; gctx.strokeRect(0,0,W,H); }
+  const cx = OX, cy = OY;
+  gctx.lineWidth = 1;
+  for (const [step, col] of [[U/2, C.grid],[U, C.gridMajor]]){
+    gctx.strokeStyle = col; gctx.beginPath();
+    for (let x = cx % step; x <= W; x += step){ gctx.moveTo(x,0); gctx.lineTo(x,H); }
+    for (let y = cy % step; y <= H; y += step){ gctx.moveTo(0,y); gctx.lineTo(W,y); }
+    gctx.stroke();
+  }
+  const ax = cx, ay = cy;
+  gctx.strokeStyle = C.axis; gctx.fillStyle = C.axis; gctx.lineWidth = 1.4;
+  gctx.beginPath(); gctx.moveTo(0,ay); gctx.lineTo(W,ay); gctx.moveTo(ax,0); gctx.lineTo(ax,H); gctx.stroke();
+  // numbered ticks, one per unit
+  gctx.font = '12px "STIX Two Text", Georgia, serif';
+  const every = U < 44 ? 2 : 1;
+  const xm = Math.floor(cx/U), ym = Math.floor(cy/U);
+  gctx.beginPath();
+  gctx.textAlign = 'center'; gctx.textBaseline = 'top';
+  for (let i = -xm; i <= xm; i++){
+    if (!i || i % every) continue;
+    const X = cx + i*U;
+    gctx.moveTo(X, ay-4); gctx.lineTo(X, ay+4);
+  }
+  gctx.textAlign = 'right'; gctx.textBaseline = 'middle';
+  for (let j = -ym; j <= ym; j++){
+    if (!j || j % every) continue;
+    const Y = cy - j*U;
+    gctx.moveTo(ax-4, Y); gctx.lineTo(ax+4, Y);
+  }
+  gctx.stroke();
+  gctx.textBaseline = 'alphabetic';
+  gctx.font = 'italic 16px "STIX Two Text", Georgia, serif';
+  gctx.textAlign = 'right'; gctx.fillText('x', W-10, ay-8);
+  gctx.textAlign = 'left';  gctx.fillText('y', ax+8, 96);
+  gctx.textAlign = 'right'; gctx.fillText('O', ax-6, ay+18);
+}
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  // top two thirds: the graph where the game is played; bottom third: the swipe area
+  RW = window.innerWidth; RH = Math.round(window.innerHeight*2/3);
+  cv.style.height = RH + 'px';
+  pad.style.top = RH + 'px';
+  cv.width = Math.round(RW*DPR); cv.height = Math.round(RH*DPR);
+  // solo: the graph fills the screen. Online: every phone uses the same 390 × 563 graph,
+  // scaled to fit, so all players see exactly the same curves.
+  const nw = MP.on ? VW : RW, nh = MP.on ? VH : RH, changed = nw !== W || nh !== H;
+  W = nw; H = nh;
+  VK = Math.min(RW/W, RH/H); VX = (RW - W*VK)/2; VY = (RH - H*VK)/2;
+  ctx.setTransform(DPR*VK,0,0,DPR*VK,DPR*VX,DPR*VY);
+  diag = Math.hypot(W,H); minDim = Math.min(W,H);
+  S = clamp(minDim/400, .85, 1.4);
+  U = 2*clamp(Math.round(minDim/16), 20, 45);
+  OX = Math.floor(W/2) + .5; OY = Math.floor(H/2) + .5;
+  if (changed) paths = [];        // curves are drawn in graph units, so start fresh on a new graph size
+  if (player){ player.x = clamp(player.x, 10, W-10); player.y = clamp(player.y, 10, H-10); }
+  drawGrid();
+}
+
+/* ---------- curve families (true graphs on the drawn axes) ---------- */
+const pick = a => a[Math.floor(R()*a.length)];
+const sgn = () => R() < .5 ? 1 : -1;
+const num = n => (n < 0 ? MINUS : '') + String(+Math.abs(n).toFixed(2));
+const coef = (a, s) => a === 1 ? s : a === -1 ? MINUS + s : num(a) + s;
+const coefFn = (a, s) => a === 1 ? s : a === -1 ? MINUS + s : num(a) + ' ' + s;
+const plus = k => k === 0 ? '' : k > 0 ? ` + ${num(k)}` : ` ${MINUS} ${num(-k)}`;
+const shifted = (v, h) => h === 0 ? v : `${v} ${h > 0 ? MINUS : '+'} ${num(Math.abs(h))}`;
+const paren = (v, h) => h === 0 ? v : `(${shifted(v, h)})`;
+const flipArg = (v, h) => h === 0 ? MINUS + v : `${num(h)} ${MINUS} ${v}`;   // −(v − h) written as h − v
+const SUP = { x:'ˣ', y:'ʸ' };
+const iRange = (a, b) => { a = Math.ceil(a); b = Math.floor(b); return b < a ? a : randInt(a, b); };
+const RUN = 8;   // graph units of real curve kept beyond the screen edge, as run-up before a ball appears
+const fx = (f, A) => ({ g:u => [u, f(u)], s0:-A-RUN+.5, s1:A+RUN-.5 });
+
+// Each family works in (u, v): u is the free variable, v the value. A and B are the
+// visible half-widths along u and v, in graph units. Swapping turns y = f(x) into x = f(y).
+// Every family gives an exact parametrisation g(s) of its own equation; nothing is stretched.
+const FAMILIES = [
+  { name:'a straight line', make(A,B){
+      const m = pick([-2,-1,-.5,.5,1,2]), c = iRange(-2,2);
+      return { ...fx(u => m*u + c, A), ex:v => `${coef(m, v)}${plus(c)}` }; } },
+  { name:'a parabola', make(A,B){
+      const a = pick([.25,.5,1,2])*sgn(), h = iRange(-A/2, A/2), k = a > 0 ? iRange(-B+1, 0) : iRange(0, B-1);
+      return { ...fx(u => a*(u-h)**2 + k, A), ex:v => `${coef(a, paren(v,h)+'²')}${plus(k)}` }; } },
+  { name:'a cubic', make(A,B){
+      const a = pick([.1,.2,.25,.5])*sgn(), b = pick([-3,-2,-1,0,1]), k = iRange(-2,2);
+      return { ...fx(u => a*u**3 + b*u + k, A),
+               ex:v => `${coef(a, v+'³')}${b ? (b > 0 ? ' + ' : ` ${MINUS} `) + coef(Math.abs(b), v) : ''}${plus(k)}` }; } },
+  { name:'an exponential', make(A,B){
+      const s = pick([1,2,.5,-1,-2]), d = pick([1,-1]), h = iRange(-2,2), k = iRange(-3,3);
+      return { ...fx(u => s*Math.exp(d*(u-h)) + k, A),
+               ex:v => { const e = d === 1 ? (h === 0 ? 'e'+SUP[v] : `e^(${shifted(v,h)})`)
+                                           : (h === 0 ? 'e⁻'+SUP[v] : `e^(${flipArg(v,h)})`);
+                         return `${coef(s, e)}${plus(k)}`; } }; } },
+  { name:'a logarithm', make(A,B){
+      const d = sgn(), a = pick([1,2,-1,-2,.5]), k = iRange(-2,2);
+      const h = d === 1 ? iRange(-A+1, 0) : iRange(0, A-1);
+      // u = h + d·eᵗ gives v = a·t + k exactly, and stays smooth near the asymptote u = h
+      return { g:t => [h + d*Math.exp(t), a*t + k], s0:-(B + RUN + 2 + Math.abs(k))/Math.abs(a), s1:Math.log(2*A + 2*RUN),
+               ex:v => { const arg = d === 1 ? (h === 0 ? ' '+v : `(${shifted(v,h)})`) : `(${flipArg(v,h)})`;
+                         return `${coefFn(a, 'ln'+arg)}${plus(k)}`; } }; } },
+  { name:'a sine wave', make(A,B){
+      const fn = pick(['sin','cos']), amp = pick([1,1.5,2,3])*sgn(), w = pick([.5,1,1.5,2,3]), k = iRange(-2,2);
+      const F = fn === 'sin' ? Math.sin : Math.cos;
+      return { ...fx(u => amp*F(w*u) + k, A), ex:v => `${coefFn(amp, `${fn} ${coef(w, v)}`)}${plus(k)}` }; } },
+  { name:'a wave packet', make(A,B){
+      const amp = pick([2,3,4]), s = pick([2,4,8]), w = pick([2,3,4]);
+      return { ...fx(u => amp*Math.exp(-u*u/s)*Math.sin(w*u), A),
+               ex:v => `${num(amp)}e^(${MINUS}${v}²/${s}) sin ${w}${v}` }; } },
+  { name:'a bell curve', make(A,B){
+      const amp = pick([2,3,4])*sgn(), s = pick([1,2,4]), h = iRange(-2,2), k = amp > 0 ? iRange(-B+1, 0) : iRange(0, B-1);
+      return { ...fx(u => amp*Math.exp(-((u-h)**2)/s) + k, A),
+               ex:v => `${coef(amp, `e^(${MINUS}${paren(v,h)}²${s === 1 ? '' : '/'+s})`)}${plus(k)}` }; } },
+  { name:'a hyperbola', make(A,B){
+      const a = pick([1,2,4,-1,-2,-4]), h = iRange(-2,2), k = iRange(-2,2), side = sgn();
+      // one branch, as u = h ± eᵗ, so it hugs the asymptote smoothly
+      return { g:t => { const z = side*Math.exp(t); return [h + z, a/z + k]; },
+               s0:Math.log(Math.abs(a)/(B + RUN + 2 + Math.abs(k))), s1:Math.log(2*A + 2*RUN),
+               ex:v => `${num(a)}/${paren(v,h)}${plus(k)}` }; } },
+  { name:'a sigmoid', make(A,B){
+      const amp = pick([2,3,4,6]), h = iRange(-2,2), k = iRange(-B+1, B-1-amp);
+      return { ...fx(u => amp/(1 + Math.exp(-(u-h))) + k, A),
+               ex:v => `${num(amp)}/(1 + ${h === 0 ? 'e⁻'+SUP[v] : `e^(${flipArg(v,h)})`})${plus(k)}` }; } },
+  { name:'a cycloid', param:true, make(A,B){
+      const r = pick([.5,.75,1,1.25]), s = sgn(), x0 = iRange(-2,2);
+      const y0 = s > 0 ? iRange(-B+1, B-1-2*r) : iRange(-B+1+2*r, B-1);
+      return { g:t => [r*(t - Math.sin(t)) + x0, s*r*(1 - Math.cos(t)) + y0],
+               s0:(-A-RUN-x0)/r - 1, s1:(A+RUN-x0)/r + 1,
+               exU:`${coef(r, `(t ${MINUS} sin t)`)}${plus(x0)}`, exV:`${coef(s*r, `(1 ${MINUS} cos t)`)}${plus(y0)}` }; } },
+  { name:'a spiral', polar:true, make(A,B){
+      const a = pick([.3,.4,.5,.6]);
+      return { g:t => [a*t*Math.cos(t), a*t*Math.sin(t)], s0:(Math.hypot(A,B) + 3)/a, s1:0, label:`r = ${num(a)}θ` }; } },
+];
+
+// Trace g(s) into a polyline that never strays more than 0.3 px from the true curve.
+function trace(g, s0, s1, box){
+  const tol = .3/U, maxSeg = .5;
+  const near = q => Math.abs(q[0]) <= box[0] && Math.abs(q[1]) <= box[1];
+  const off = (q, a, b, t) => Math.hypot(q[0] - (a[0] + (b[0]-a[0])*t), q[1] - (a[1] + (b[1]-a[1])*t));
+  const out = [];
+  const seg = (sa, pa, sb, pb, depth) => {
+    if (depth < 16 && (near(pa) || near(pb))){
+      const q1 = g(sa + (sb-sa)*.25), qm = g((sa+sb)/2), q3 = g(sa + (sb-sa)*.75);
+      if (Math.hypot(pb[0]-pa[0], pb[1]-pa[1]) > maxSeg ||
+          off(q1,pa,pb,.25) > tol || off(qm,pa,pb,.5) > tol || off(q3,pa,pb,.75) > tol){
+        const sm = (sa+sb)/2;
+        seg(sa, pa, sm, qm, depth+1); seg(sm, qm, sb, pb, depth+1); return;
+      }
+    }
+    out.push(pb);
+  };
+  const N = 256;
+  let sp = s0, pp = g(s0); out.push(pp);
+  for (let i=1;i<=N;i++){ const s = s0 + (s1-s0)*i/N, p = g(s); seg(sp, pp, s, p, 0); sp = s; pp = p; }
+  return out;
+}
+
+/* ---------- paths & beads ---------- */
+let paths = [];
+let colorTurn = 0;
+
+function buildPath(){
+  const A = (W/2)/U, B = (H/2)/U;                     // visible half-ranges, in graph units
+  const toScreen = ([x,y]) => [OX + x*U, OY - y*U];
+  const inside = (q, m) => q[0] > -m && q[0] < W+m && q[1] > -m && q[1] < H+m;
+  for (let tries = 0; tries < 20; tries++){
+    const fam = pick(FAMILIES);
+    const swap = !fam.polar && R() < .35;
+    const Au = swap ? B : A, Bv = swap ? A : B;
+    const c = fam.make(Au, Bv);
+    const box = fam.polar ? [Infinity, Infinity] : [Au + RUN, Bv + RUN];
+    const traced = trace(c.g, c.s0, c.s1, box);
+    let math, eq;
+    if (fam.polar){ math = traced; eq = c.label; }
+    else {
+      // keep the longest unbroken piece of the graph inside the run-up box
+      let best = [], run = [];
+      for (const q of traced){
+        if (isFinite(q[0]) && isFinite(q[1]) && Math.abs(q[0]) <= box[0] && Math.abs(q[1]) <= box[1]) run.push(q);
+        else { if (run.length > best.length) best = run; run = []; }
+      }
+      if (run.length > best.length) best = run;
+      math = best.map(([u,v]) => swap ? [v,u] : [u,v]);
+      if (fam.param) eq = swap ? `x = ${c.exV},  y = ${c.exU}` : `x = ${c.exU},  y = ${c.exV}`;
+      else eq = swap ? `x = ${c.ex('y')}` : `y = ${c.ex('x')}`;
+    }
+    if (math.length < 10) continue;
+    const pts = math.map(toScreen);
+    let onLen = 0;
+    for (let i=1;i<pts.length;i++)
+      if (inside(pts[i],0) && inside(pts[i-1],0)) onLen += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+    if (onLen < .8*minDim) continue;
+    if (!fam.polar && R() < .5) pts.reverse();
+    // a ball must start fully off screen, and leave fully off screen (only the spiral ends at O)
+    if (inside(pts[0], 40)) continue;
+    const fadeEnd = !!fam.polar;
+    if (!fadeEnd && inside(pts[pts.length-1], 40)) continue;
+
+    const X = new Float32Array(pts.length), Y = new Float32Array(pts.length), cum = new Float32Array(pts.length);
+    for (let i=0;i<pts.length;i++){
+      X[i]=pts[i][0]; Y[i]=pts[i][1];
+      if (i) cum[i] = cum[i-1] + Math.hypot(X[i]-X[i-1], Y[i]-Y[i-1]);
+    }
+    const total = cum[cum.length-1];
+    const insideI = (i,m) => X[i] > -m && X[i] < W+m && Y[i] > -m && Y[i] < H+m;
+    let enterIdx = -1, labelIdx = -1;
+    for (let i=0;i<X.length;i++){ if (enterIdx<0 && insideI(i,24)) enterIdx = i; if (labelIdx<0 && insideI(i,-46)) { labelIdx = i; break; } }
+    if (enterIdx < 0) continue;
+    if (labelIdx < 0) labelIdx = enterIdx;
+    let lx = clamp(X[labelIdx],12,W-12), ly = clamp(Y[labelIdx],70,H-20);
+    const dx = W/2-lx, dy = H/2-ly, dm = Math.hypot(dx,dy)||1;
+    lx += dx/dm*26; ly += dy/dm*26;
+
+    return { fam, eq, X, Y, cum, total, cs:0, ce:total, fadeEnd,
+             enterD:cum[enterIdx], color:colorTurn++ % 6, beads:[], label:{x:lx,y:ly}, enterTime:null };
+  }
+  return null;
+}
+
+function posAt(p, d){
+  const c = p.cum;
+  if (d <= 0) return [p.X[0], p.Y[0]];
+  if (d >= p.total) return [p.X[c.length-1], p.Y[c.length-1]];
+  let lo = 0, hi = c.length-1;
+  while (hi-lo > 1){ const m = (lo+hi) >> 1; if (c[m] <= d) lo = m; else hi = m; }
+  const t = (d - c[lo]) / ((c[hi]-c[lo]) || 1);
+  return [p.X[lo] + (p.X[hi]-p.X[lo])*t, p.Y[lo] + (p.Y[hi]-p.Y[lo])*t, lo];
+}
+// a ball shrinks away when its curve ends on screen (like the spiral at the origin)
+const sizeOf = (p, b) => b.r * (p.fadeEnd ? clamp((p.total - b.d)/40, 0, 1) : 1);
+
+function activeBalls(){
+  let n = 0;
+  for (const p of paths) for (const b of p.beads) if (b.d < p.total) n++;
+  return n;
+}
+function spawn(level, speed){
+  if (!MP.on || !MP.game || state === 'menu') return spawnOne(level, speed);   // solo, or the demo behind the lobby
+  // online: each spawn gets its own seeded stream, so a tiny difference between phones
+  // can never shift the curves that come after it
+  const saved = R;
+  R = mulberry32((MP.game.seed ^ Math.imul(++spawnCount, 0x9E3779B1)) >>> 0);
+  try { return spawnOne(level, speed); } finally { R = saved; }
+}
+const curMaxBalls = () => MP.on && MP.game ? MP.game.maxBalls : settings.maxBalls;
+function spawnOne(level, speed){
+  const room = curMaxBalls() - activeBalls();
+  if (room <= 0) return false;
+  const p = buildPath();
+  if (!p) return;
+  const maxBeads = Math.min(5, 1 + Math.floor(level/2));
+  const count = Math.min(randInt(1, maxBeads), room);
+  const r = 11*S;                                   // every ball is the same size
+  const gap = r*2 + rand(28,48)*S;
+  const startD = Math.max(0, p.enterD - speed*1.8);
+  for (let i=0;i<count;i++) p.beads.push({ d:startD - i*gap, r });
+  paths.push(p);
+}
+
+/* ---------- game state ---------- */
+let state = 'menu';        // menu | play | paused | over
+let player = null;
+let clock = 0, runTime = 0, level = 1, spawnTimer = 0, lastLevel = 1;
+let hitBy = null;
+let best = 0;
+try { best = parseFloat(localStorage.getItem('locus-best')) || 0; } catch(e) { best = 0; }
+
+const settings = { lines:'ahead', maxBalls:25, swipe:1.6, labels:false, lives:3, players:2 };
+try {
+  const s = JSON.parse(localStorage.getItem('locus-settings') || '{}');
+  if (['off','ahead','full'].includes(s.lines)) settings.lines = s.lines;
+  if (s.maxBalls >= 3 && s.maxBalls <= 60) settings.maxBalls = Math.round(s.maxBalls);
+  if (s.swipe >= 1 && s.swipe <= 3) settings.swipe = Math.round(s.swipe*10)/10;
+  if (typeof s.labels === 'boolean') settings.labels = s.labels;
+  if (s.lives >= 1 && s.lives <= 5) settings.lives = Math.round(s.lives);
+  if (s.players >= 2 && s.players <= 8) settings.players = Math.round(s.players);
+} catch(e){}
+function saveSettings(){ try { localStorage.setItem('locus-settings', JSON.stringify(settings)); } catch(e){} }
+function syncSettingsUI(){
+  document.querySelectorAll('input[name="lines"]').forEach(r => { r.checked = r.value === settings.lines; });
+  ui.maxBalls.value = settings.maxBalls;
+  ui.maxBallsVal.textContent = settings.maxBalls;
+  document.getElementById('swipeSpeed').value = settings.swipe;
+  document.getElementById('swipeVal').textContent = settings.swipe.toFixed(1) + '×';
+  document.getElementById('showEq').checked = settings.labels;
+  document.getElementById('livesIn').value = settings.lives;
+  document.getElementById('livesVal').textContent = settings.lives;
+  ui.mLives.value = settings.lives; ui.mLivesVal.textContent = settings.lives;
+  document.getElementById('mPlayers').value = settings.players;
+  document.getElementById('mPlayersVal').textContent = settings.players;
+}
+document.querySelectorAll('input[name="lines"]').forEach(r => r.addEventListener('change', () => {
+  if (r.checked){ settings.lines = r.value; saveSettings(); }
+}));
+ui.maxBalls.addEventListener('input', () => {
+  settings.maxBalls = parseInt(ui.maxBalls.value, 10);
+  ui.maxBallsVal.textContent = settings.maxBalls;
+  saveSettings();
+});
+document.getElementById('swipeSpeed').addEventListener('input', e => {
+  settings.swipe = Math.round(parseFloat(e.target.value)*10)/10;
+  document.getElementById('swipeVal').textContent = settings.swipe.toFixed(1) + '×';
+  saveSettings();
+});
+document.getElementById('showEq').addEventListener('change', e => {
+  settings.labels = e.target.checked;
+  saveSettings();
+});
+document.getElementById('mPlayers').addEventListener('input', e => {
+  settings.players = clamp(parseInt(e.target.value, 10) || 2, 2, 8);
+  saveSettings(); syncSettingsUI();
+  if (typeof mpPublish === 'function' && MP.rm){ mpPublish({ need:settings.players }); onRoomPeers({ peers:MP.rm.peers() }); }
+});
+for (const id of ['livesIn', 'mLives']) document.getElementById(id).addEventListener('input', e => {
+  settings.lives = clamp(parseInt(e.target.value, 10) || 3, 1, 5);
+  saveSettings(); syncSettingsUI();
+});
+syncSettingsUI();
+
+
+const baseSpeed = () => clamp(minDim*.4, 130, 240);
+const speedMul = lv => 1 + .18*(lv-1);
+const spawnEvery = lv => Math.max(.42, 1.45*Math.pow(.9, lv-1));
+
+function showBest(){
+  ui.startBest.textContent = best > 0 ? `Best: ${best.toFixed(1)} s` : '';
+  ui.best.textContent = best > 0 ? `Best ${best.toFixed(1)} s` : '';
+}
+
+function startRun(){
+  if (MP.on) return;
+  R = Math.random;
+  paths = []; runTime = 0; level = 1; lastLevel = 1; spawnTimer = .4; hitBy = null;
+  me.lives = settings.lives; me.alive = true; me.inv = 0;
+  ui.pause.hidden = false;
+  player = { x:W/2, y:H*.72 };
+  state = 'play';
+  ui.start.hidden = true; ui.over.hidden = true; ui.paused.hidden = true;
+  ui.hud.classList.add('on');
+  showBest(); updateHud();
+}
+
+function setPaused(on){
+  if (on && state === 'play'){ state = 'paused'; ui.pauseSlot.append(ui.settings); ui.paused.hidden = false; ui.resumeBtn.focus({preventScroll:true}); }
+  else if (!on && state === 'paused'){ state = 'play'; ui.paused.hidden = true; last = performance.now(); }
+}
+
+// a ball touched you: lose a life; with lives left you blink, untouchable, for 2 seconds
+function onHit(p){
+  try { navigator.vibrate && navigator.vibrate(70); } catch(e){}
+  me.lives--; hitBy = p;
+  if (me.lives > 0){
+    me.inv = clock + 2;
+    toast(`${me.lives} ${me.lives === 1 ? 'life' : 'lives'} left`, `hit by ${p.fam.name}`);
+    if (MP.on) mpPublish({ lives:me.lives });
+    updateHud();
+    return;
+  }
+  if (MP.on){
+    me.alive = false;
+    toast('You’re out', 'watching the others');
+    mpPublish({ st:'out', lives:0, t:+runTime.toFixed(1), x:null, y:null });
+    updateHud();
+  } else gameOver(p);
+}
+
+function gameOver(path){
+  state = 'over'; hitBy = path;
+  const isBest = runTime > best;
+  if (isBest){ best = runTime; try { localStorage.setItem('locus-best', String(best)); } catch(e){} }
+  ui.overTitle.textContent = `Hit by ${path.fam.name}`;
+  ui.overEq.textContent = path.eq;
+  ui.overEq.style.color = C.beads[path.color];
+  ui.overText.textContent = `You lasted ${runTime.toFixed(1)} s and reached level ${level}.` +
+    (isBest ? ' That’s a new best!' : ` Best: ${best.toFixed(1)} s.`);
+  setTimeout(() => { if (state === 'over'){ ui.overSlot.append(ui.settings); ui.over.hidden = false; ui.againBtn.focus({preventScroll:true}); } }, 550);
+}
+
+let toastTimer = 0;
+function toast(main, sub){
+  ui.toast.innerHTML = '';
+  ui.toast.append(main);
+  const sm = document.createElement('small'); sm.textContent = sub; ui.toast.append(sm);
+  ui.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1100);
+}
+
+function updateHud(){
+  ui.lvl.textContent = `Level ${level}`;
+  ui.spd.textContent = `Speed ${speedMul(level).toFixed(2)}×`;
+  ui.time.textContent = `${runTime.toFixed(1)} s`;
+  ui.balls.textContent = `Balls ${activeBalls()} of ${curMaxBalls()}`;
+  const maxL = MP.on && MP.game ? MP.game.lives : settings.lives;
+  ui.lives.textContent = MP.on && !me.alive ? 'Watching' : '♥'.repeat(Math.max(0, me.lives)) + '♡'.repeat(Math.max(0, maxL - me.lives));
+}
+
+/* ---------- update & draw ---------- */
+function update(dt){
+  clock += dt;
+  let lv, speed;
+  if (state === 'play'){
+    runTime += dt;
+    level = 1 + Math.floor(runTime / LEVEL_SECONDS);
+    if (level !== lastLevel){ lastLevel = level; toast(`Level ${level}`, 'faster'); }
+    lv = level;
+  } else {
+    lv = 2;                         // gentle demo behind the menu
+  }
+  speed = baseSpeed()*speedMul(lv);
+
+  spawnTimer -= dt;
+  if (spawnTimer <= 0){
+    if (spawn(lv, speed) === false) spawnTimer = .15;
+    else if (state !== 'play') spawnTimer = rand(.7,1.1);
+    else spawnTimer = spawnEvery(lv)*(MP.on ? .8 + .4*timeRng() : rand(.8,1.2));
+  }
+
+  const hitR = 4.5*S;
+  let hitNow = null;
+  for (const p of paths){
+    for (const b of p.beads){ b.d += speed*dt; }
+    const lead = p.beads[0].d;
+    if (p.enterTime === null && lead >= p.enterD){
+      p.enterTime = clock;
+    }
+    if (state === 'play' && me.alive && clock >= me.inv && !hitNow){
+      for (const b of p.beads){
+        if (b.d < 0 || b.d > p.total) continue;
+        const [bx,by] = posAt(p, b.d);
+        const dx = bx-player.x, dy = by-player.y, rr = sizeOf(p, b) + hitR;
+        if (dx*dx + dy*dy < rr*rr){ hitNow = p; break; }
+      }
+    }
+  }
+  if (hitNow) onHit(hitNow);
+  paths = paths.filter(p => p.beads[p.beads.length-1].d < p.total);
+  if (state === 'play') updateHud();
+}
+
+function strokeRange(p, d0, d1){
+  d0 = Math.max(p.cs,d0); d1 = Math.min(p.ce,d1);
+  if (d1 <= d0) return;
+  const a = posAt(p, d0);
+  let i = (a[2] ?? 0) + 1;
+  ctx.moveTo(a[0], a[1]);
+  while (i < p.cum.length && p.cum[i] < d1){ ctx.lineTo(p.X[i], p.Y[i]); i++; }
+  const b = posAt(p, d1);
+  ctx.lineTo(b[0], b[1]);
+}
+
+// a player: a white ball with a black outline; yours also sits inside a ring
+function drawPlayer(x, y, mine){
+  if (mine){ ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 12*S, 0, Math.PI*2); ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(x, y, 6*S, 0, Math.PI*2);
+  ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#111'; ctx.stroke();
+}
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.drawImage(gridCv, 0, 0);
+  ctx.setTransform(DPR*VK,0,0,DPR*VK,DPR*VX,DPR*VY);
+  ctx.save(); ctx.beginPath(); ctx.rect(0,0,W,H); ctx.clip();
+  const lv = state === 'menu' ? 2 : level;
+  const speed = baseSpeed()*speedMul(lv);
+  const look = Math.max(450, speed*2.4);
+  const mode = settings.lines;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  for (const p of paths){
+    const col = C.beads[p.color];
+    const lead = p.beads[0].d, tail = p.beads[p.beads.length-1].d;
+    ctx.strokeStyle = col;
+    // the part already plotted, behind the beads
+    ctx.globalAlpha = .22; ctx.lineWidth = 2;
+    ctx.beginPath(); strokeRange(p, tail - 220, lead); ctx.stroke();
+    // the whole curve, start to finish
+    if (mode === 'full'){
+      ctx.globalAlpha = .4; ctx.lineWidth = 2;
+      ctx.beginPath(); strokeRange(p, 0, p.total); ctx.stroke();
+    }
+    // where the curve is heading, fading out
+    if (mode === 'ahead'){
+      const chunks = 9, step = look/chunks;
+      ctx.lineWidth = 1.6;
+      for (let j=0;j<chunks;j++){
+        ctx.globalAlpha = .5*(1 - j/chunks);
+        ctx.setLineDash([5,6]);
+        ctx.beginPath(); strokeRange(p, lead + j*step, lead + (j+1)*step); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+    // equation label
+    const la = p.enterTime === null ? 1 : clamp(1 - (clock - p.enterTime - 1.2)/.8, 0, 1);
+    if (settings.labels && la > 0 && lead + look > p.enterD){
+      ctx.globalAlpha = la;
+      ctx.font = 'italic 600 16px "STIX Two Text", Georgia, serif';
+      const tw = ctx.measureText(p.eq).width;
+      const x = clamp(p.label.x - tw/2, 8, W - tw - 8), y = p.label.y;
+      ctx.fillStyle = C.paper; ctx.globalAlpha = la*.85;
+      ctx.fillRect(x-5, y-15, tw+10, 21);
+      ctx.globalAlpha = la; ctx.fillStyle = col; ctx.textAlign = 'left';
+      ctx.fillText(p.eq, x, y);
+    }
+    // beads
+    ctx.globalAlpha = 1;
+    for (const b of p.beads){
+      if (b.d < 0 || b.d > p.total) continue;
+      const [x,y] = posAt(p, b.d);
+      if (x < -30 || x > W+30 || y < -30 || y > H+30) continue;
+      const rad = sizeOf(p, b); if (rad <= 0) continue;
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI*2);
+      ctx.fillStyle = col; ctx.fill();                          // each curve's balls share its colour
+      ctx.lineWidth = 2; ctx.strokeStyle = C.paper; ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // other players online: white dots with their names
+  if (MP.on && MP.rm && MP.game){
+    ctx.font = '700 12px "Atkinson Hyperlegible", system-ui, sans-serif'; ctx.textAlign = 'center';
+    for (const pr of MP.rm.peers()){
+      if (pr.sameTab) continue;
+      const q = pr.presence || {};
+      if (q.gid !== MP.game.id || q.st === 'out' || typeof q.x !== 'number' || typeof q.y !== 'number') continue;
+      const x = clamp(q.x, 0, W), y = clamp(q.y, 0, H);
+      drawPlayer(x, y, false);
+      ctx.fillStyle = C.ink; ctx.fillText(String(q.name || 'Player').slice(0,16), x, y - 11*S);
+    }
+  }
+  // you: a white dot inside a ring (it blinks while you can't be hit)
+  if (player && state !== 'menu' && (!MP.on || (MP.participant && me.alive))){
+    ctx.globalAlpha = clock < me.inv && Math.floor(clock*10) % 2 === 0 ? .25 : 1;
+    drawPlayer(player.x, player.y, true);
+    ctx.globalAlpha = 1;
+    if (state === 'over'){
+      const t = clamp((clock % 1), 0, 1);
+      ctx.strokeStyle = hitBy ? C.beads[hitBy.color] : C.ink; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(player.x, player.y, 18*S + 10*S*t, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+  // countdown before an online round
+  if (state === 'countdown'){
+    const n = Math.ceil((MP.startAt - hostNow())/1000);
+    if (n > 0){
+      ctx.fillStyle = C.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'italic 600 88px "STIX Two Text", Georgia, serif';
+      ctx.fillText(String(n), W/2, H/2);
+      ctx.font = '400 15px "Atkinson Hyperlegible", system-ui, sans-serif';
+      ctx.fillText(MP.participant ? 'Get ready' : 'Watching this round', W/2, H/2 + 62);
+      ctx.textBaseline = 'alphabetic';
+    }
+  }
+  ctx.restore();
+}
+
+let last = performance.now();
+let frameNo = 0;
+function frame(now){
+  const dt = Math.min(.05, (now - last)/1000); last = now;
+  frameNo++;
+  if (MP.on && (state === 'countdown' || state === 'play')) mpFrame();
+  else if (state === 'play') update(dt);
+  else if (state === 'over') clock += dt;
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- online play: friends join the same game from their own phones ---------- */
+// Each player shares their dot position, lives and status through the room's presence.
+// The host's presence also carries the round: a random seed and a start time. Every phone
+// builds the very same curves from that seed, in the same 390 × 563 graph, stepped 60 times
+// a second from the shared start time, so everyone dodges the same balls at the same moment.
+const VW = 390, VH = 563, STEP = 1/60;
+const MP = { on:false, lobby:null, transport:'', rm:null, code:'', name:'', game:null, playedId:null,
+             simT:0, startAt:0, participant:false, ended:false, lastPos:'', lastT:-1, unsub:null,
+             offset:0, bestRtt:Infinity, syncN:0, syncT0:0, syncDone:0, syncTicks:0, syncTimer:0, ackStore:{} };
+// the host's clock as seen from this phone; every round is timed on it
+const hostNow = () => Date.now() + MP.offset;
+const me = { lives:3, alive:true, inv:0 };
+let timeRng = Math.random, spawnCount = 0;
+function mulberry32(a){
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+                 t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+const randCode = n => Array.from({length:n}, () => CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)]).join('');
+const mpPublish = patch => { if (MP.rm){ try { Promise.resolve(MP.rm.presence(patch)).catch(() => {}); } catch(e){} } };
+const byPeer = (a, b) => a.peer < b.peer ? -1 : a.peer > b.peer ? 1 : 0;
+const peerName = q => (typeof q.name === 'string' && q.name.trim() ? q.name.trim() : 'Player').slice(0, 16);
+
+// ---- online connection, part 1: Firebase (the Android app and any normal website) ----
+// These settings identify the game's Firebase project; they are meant to be public.
+const FIREBASE = {
+  apiKey: "AIzaSyApqk_gTfHgxXjshhTLBNsniTdsnhgCC_A",
+  authDomain: "locus-a8b2f.firebaseapp.com",
+  databaseURL: "https://locus-a8b2f-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "locus-a8b2f",
+  storageBucket: "locus-a8b2f.firebasestorage.app",
+  messagingSenderId: "180386606499",
+  appId: "1:180386606499:web:0917753f16aecdc13c7e16"
+};
+const FB_VER = '10.12.2';
+let fbDbPromise = null;
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = true; s.onload = res; s.onerror = () => rej(new Error('load'));
+    document.head.appendChild(s);
+  });
+}
+function withTimeout(promise, ms){
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+}
+// Firebase loads only when someone taps "Play with friends", so solo play never needs the internet
+function fbDb(){
+  if (!fbDbPromise){
+    fbDbPromise = (async () => {
+      if (!window.firebase || !window.firebase.database){
+        await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-app-compat.js`);
+        await loadScript(`https://www.gstatic.com/firebasejs/${FB_VER}/firebase-database-compat.js`);
+      }
+      const fb = window.firebase;
+      const app = fb.apps && fb.apps.length ? fb.app() : fb.initializeApp(FIREBASE);
+      const db = app.database();
+      // every phone reads the gap between its clock and Firebase's clock: rounds run on server time
+      db.ref('.info/serverTimeOffset').on('value', snap => {
+        if (MP.transport === 'firebase') MP.offset = +snap.val() || 0;
+      });
+      return db;
+    })().catch(e => { fbDbPromise = null; throw e; });
+  }
+  return fbDbPromise;
+}
+// The same shape as the Claude room: presence(), peers(), onPeers(), leave()
+function firebaseLobby(){
+  return {
+    async join(name){
+      const code = name.replace(/^locus-/, '');
+      const db = await withTimeout(fbDb(), 15000);
+      const id = randCode(14);
+      const listRef = db.ref('rooms/' + code + '/peers'), meRef = listRef.child(id);
+      let others = {};
+      const mine = {}, subs = new Set(), errs = new Set();
+      const list = () => {
+        const all = Object.assign({}, others, { [id]:mine });
+        return Object.keys(all).map(peer => ({ peer, presence:all[peer] || {}, kind:'viewer', sameTab:peer === id, isMe:peer === id }));
+      };
+      const emit = () => {
+        const peers = list();
+        subs.forEach(f => { try { f({ peers, joined:[], left:[], updated:[] }); } catch(e){ console.error(e); } });
+      };
+      const onVal = snap => { others = snap.val() || {}; delete others[id]; emit(); };
+      const onErr = () => errs.forEach(f => { try { f(); } catch(e){} });
+      // if the connection drops and comes back, put this player back in the room
+      const connRef = db.ref('.info/connected');
+      const onConn = snap => {
+        if (snap.val() === true){
+          meRef.onDisconnect().remove().catch(() => {});
+          if (Object.keys(mine).length) meRef.set(mine).catch(() => {});
+        }
+      };
+      await withTimeout(meRef.onDisconnect().remove(), 15000);
+      listRef.on('value', onVal, onErr);
+      connRef.on('value', onConn);
+      return {
+        presence(patch){
+          for (const k of Object.keys(patch)){
+            if (patch[k] === null || patch[k] === undefined) delete mine[k]; else mine[k] = patch[k];
+          }
+          const clean = {};
+          for (const k of Object.keys(patch)) clean[k] = patch[k] === undefined ? null : patch[k];
+          return meRef.update(clean);
+        },
+        peers: list,
+        onPeers(f, e){
+          subs.add(f); if (e) errs.add(e);
+          setTimeout(() => { if (subs.has(f)) f({ peers:list(), joined:[], left:[], updated:[] }); }, 0);
+          return () => { subs.delete(f); errs.delete(e); };
+        },
+        leave(){
+          listRef.off('value', onVal); connRef.off('value', onConn);
+          subs.clear(); errs.clear();
+          meRef.onDisconnect().cancel().catch(() => {});
+          return meRef.remove();
+        },
+      };
+    },
+  };
+}
+
+// ---- online connection, part 2: pick the right one for where the game is running ----
+// Inside Claude the game uses Claude's live room; everywhere else (the Android app) it uses Firebase.
+(async () => {
+  if (window.claude && typeof window.claude.use === 'function'){
+    let room = null;
+    try { room = await window.claude.use('room'); } catch(e){ room = null; }
+    if (!room){ const n = document.getElementById('mpNote'); if (n) n.hidden = false; return; }
+    MP.lobby = room; MP.transport = 'claude';
+    ui.mpBtn.hidden = false;
+    return;
+  }
+  MP.lobby = firebaseLobby(); MP.transport = 'firebase';
+  ui.mpBtn.hidden = false;
+})();
+
+function showLobby(){
+  ui.start.hidden = true; ui.over.hidden = true; ui.results.hidden = true;
+  ui.lobby.hidden = false; ui.lobbyErr.textContent = '';
+  const inRoom = !!MP.rm;
+  ui.lobbyJoin.hidden = inRoom; ui.lobbyRoom.hidden = !inRoom;
+  if (!inRoom){
+    try { ui.nick.value = localStorage.getItem('locus-name') || ''; } catch(e){}
+  }
+}
+function readName(){
+  const n = ui.nick.value.trim().slice(0, 16) || 'Player';
+  try { localStorage.setItem('locus-name', n); } catch(e){}
+  return n;
+}
+async function joinRoom(code, asHost){
+  ui.lobbyErr.textContent = 'Connecting…';
+  let rm;
+  try { rm = await MP.lobby.join('locus-' + code); }
+  catch(e){
+    ui.lobbyErr.textContent = e && e.code === 'not_permitted'
+      ? 'Online play isn’t available for your account here.'
+      : 'Could not connect. Check your internet connection and try again.';
+    return;
+  }
+  ui.lobbyErr.textContent = '';
+  MP.rm = rm; MP.code = code; MP.name = readName(); MP.game = null; MP.playedId = null; MP.starting = false;
+  MP.on = true; resize();
+  paths = []; state = 'menu';
+  // Inside Claude: measure the gap between this phone's clock and the host's, keeping the best.
+  // With Firebase the server's own clock is used instead (see fbDb).
+  if (MP.transport !== 'firebase') MP.offset = 0;
+  MP.bestRtt = Infinity; MP.syncN = 0; MP.syncDone = 0; MP.syncTicks = 0; MP.ackStore = {};
+  clearInterval(MP.syncTimer);
+  if (MP.transport === 'claude') MP.syncTimer = setInterval(() => {
+    if (!MP.rm) return;
+    MP.syncTicks++;
+    if (MP.syncTicks <= 10 || MP.syncTicks % 8 === 0){
+      MP.syncN++; MP.syncT0 = Date.now(); mpPublish({ sync:{ n:MP.syncN, t0:MP.syncT0 } });
+    }
+  }, 1200);
+  mpPublish({ v:1, name:MP.name, host:asHost, st:'lobby', gid:null, x:null, y:null, lives:null, t:0, need:asHost ? settings.players : null });
+  MP.unsub = rm.onPeers(onRoomPeers, () => leaveRoom('The connection to the game was lost.'));
+  ui.codeOut.textContent = code.toUpperCase();
+  showLobby();
+  renderPlayers(rm.peers());
+}
+function leaveRoom(msg){
+  clearInterval(MP.syncTimer);
+  if (MP.unsub){ try { MP.unsub(); } catch(e){} MP.unsub = null; }
+  if (MP.rm){ MP.rm.leave().catch(() => {}); MP.rm = null; }
+  MP.on = false; MP.game = null; MP.participant = false;
+  R = Math.random; resize();
+  paths = []; state = 'menu'; player = null;
+  ui.hud.classList.remove('on'); ui.results.hidden = true; ui.pause.hidden = false;
+  showLobby();
+  ui.lobbyErr.textContent = msg || '';
+}
+// the host is whoever created the game; if two claim it, the same one wins on every phone
+function hostOf(peers){ return peers.filter(p => p.presence && p.presence.host === true).sort(byPeer)[0] || null; }
+function validGame(g){
+  return g && typeof g === 'object' && typeof g.id === 'string' && g.id.length <= 12 &&
+    Number.isInteger(g.seed) && typeof g.startAt === 'number' && g.startAt < hostNow() + 60000 &&
+    Number.isInteger(g.lives) && g.lives >= 1 && g.lives <= 5 &&
+    Number.isInteger(g.maxBalls) && g.maxBalls >= 3 && g.maxBalls <= 60;
+}
+function onRoomPeers(change){
+  const peers = change.peers;
+  if (!ui.lobby.hidden) renderPlayers(peers);
+  {
+    const h = hostOf(peers);
+    if (h && h.sameTab && state === 'menu' && !ui.lobby.hidden && !MP.starting && lobbyCount(peers) >= settings.players){
+      MP.starting = true;
+      setTimeout(hostStartRound, 0);
+    }
+  }
+  const hp = hostOf(peers), meP = peers.find(p => p.sameTab);
+  if (MP.transport !== 'claude'){
+    // Firebase: every phone already runs on the server's clock
+  } else if (hp && meP && hp.peer === meP.peer){
+    // host: answer each player's clock ping with the time on my clock
+    MP.offset = 0;
+    let changed = false;
+    for (const p of peers){
+      const sy = p.presence && p.presence.sync, key = 'p_' + p.peer;
+      if (p.sameTab || !sy || !Number.isInteger(sy.n) || typeof sy.t0 !== 'number') continue;
+      if (!MP.ackStore[key] || MP.ackStore[key].n !== sy.n){ MP.ackStore[key] = { n:sy.n, t0:sy.t0, th:Date.now() }; changed = true; }
+    }
+    if (changed){
+      const live = new Set(peers.map(p => 'p_' + p.peer));
+      for (const k of Object.keys(MP.ackStore)) if (!live.has(k)) delete MP.ackStore[k];
+      mpPublish({ acks:MP.ackStore });
+    }
+  } else if (hp && meP){
+    // player: the host's answer tells how far apart the two clocks are
+    const a = hp.presence.acks && hp.presence.acks['p_' + meP.peer];
+    if (a && a.n === MP.syncN && a.t0 === MP.syncT0 && MP.syncDone !== a.n && typeof a.th === 'number'){
+      MP.syncDone = a.n;
+      const now = Date.now(), rtt = now - a.t0;
+      if (rtt >= 0 && rtt < 5000 && rtt <= MP.bestRtt){ MP.bestRtt = rtt; MP.offset = a.th + rtt/2 - now; }
+    }
+  }
+  const g = hp && hp.presence.game;
+  if (validGame(g) && g.id !== MP.playedId){
+    MP.playedId = g.id;
+    beginRound(g, hostNow() < g.startAt + 1000);    // everyone in the game when it starts plays; latecomers watch
+  }
+  if (state === 'results') renderResults(peers);
+}
+function renderPlayers(peers){
+  ui.plist.innerHTML = '';
+  const hp = hostOf(peers);
+  for (const p of peers.slice().sort(byPeer)){
+    const q = p.presence || {};
+    if (p.kind !== 'viewer' || q.v !== 1) continue;
+    const li = document.createElement('li');
+    li.textContent = peerName(q) + (p.sameTab ? ' (you)' : '') + (hp && p.peer === hp.peer ? ' (host)' : '');
+    ui.plist.append(li);
+  }
+  const iAmHost = !!(hp && hp.sameTab);
+  ui.hostCtl.hidden = !iAmHost; ui.mStart.hidden = true; ui.waitMsg.hidden = false;
+  if (!hp){ ui.waitMsg.textContent = 'Waiting for the host to join…'; return; }
+  const joined = lobbyCount(peers), need = needOf(hp);
+  ui.waitMsg.textContent = joined >= need ? 'Everyone’s here, starting…'
+    : `Waiting for players: ${joined} of ${need} joined. The game starts by itself when everyone is in.`;
+}
+const lobbyCount = peers => peers.filter(p => p.kind === 'viewer' && p.presence && p.presence.v === 1).length;
+const needOf = hp => { const n = hp && hp.presence && hp.presence.need; return Number.isInteger(n) && n >= 2 && n <= 8 ? n : 2; };
+// the host starts a round: a fresh seed, and a start time 3.5 s from now for the countdown
+function hostStartRound(){
+  const g = { id:randCode(6), seed:(Math.random()*4294967296) >>> 0 | 0, startAt:hostNow() + 3500,
+              lives:settings.lives, maxBalls:settings.maxBalls };
+  mpPublish({ game:g });
+  MP.playedId = g.id;
+  beginRound(g, true);
+}
+function beginRound(g, playing){
+  MP.game = g; MP.ended = false; MP.participant = playing;
+  MP.startAt = g.startAt; MP.simT = 0; MP.lastPos = ''; MP.lastT = -1;
+  ui.lobby.hidden = true; ui.results.hidden = true; ui.start.hidden = true; ui.over.hidden = true; ui.paused.hidden = true;
+  // the same world on every phone: same graph, same seed, same steps
+  paths = []; runTime = 0; level = 1; lastLevel = 1; spawnTimer = .4; hitBy = null; clock = 0; colorTurn = 0;
+  spawnCount = 0; R = Math.random; timeRng = mulberry32(g.seed >>> 0);
+  // players start spread out along the bottom of the graph
+  const ids = MP.rm ? MP.rm.peers().filter(p => p.kind === 'viewer').map(p => p.peer).sort() : [];
+  const meP = MP.rm && MP.rm.peers().find(p => p.sameTab);
+  const i = meP ? Math.max(0, ids.indexOf(meP.peer)) : 0, n = Math.max(1, ids.length);
+  player = { x:VW*(i + 1)/(n + 1), y:VH*.78 };
+  me.lives = g.lives; me.alive = playing; me.inv = 0;
+  state = 'countdown';
+  ui.hud.classList.add('on'); ui.pause.hidden = true;
+  mpPublish({ gid:playing ? g.id : null, st:playing ? 'play' : 'watch', lives:playing ? me.lives : null, t:0,
+              x:playing ? Math.round(player.x) : null, y:playing ? Math.round(player.y) : null });
+  updateHud();
+}
+// every frame: run the shared simulation up to "now", in fixed 1/60 s steps
+function mpFrame(){
+  const target = (hostNow() - MP.startAt)/1000;
+  if (target < 0) return;
+  if (state === 'countdown'){ state = 'play'; toast('Go!', MP.participant ? 'dodge the black balls' : 'watching'); }
+  let n = 0;
+  while (MP.simT + STEP <= target && n++ < 600 && state === 'play'){ update(STEP); MP.simT += STEP; }
+  if (state !== 'play') return;
+  if (MP.participant && me.alive){
+    const pos = Math.round(player.x) + ',' + Math.round(player.y), tNow = performance.now();
+    // send your position up to 20 times a second
+    if (pos !== MP.lastPos && tNow - (MP.lastPosAt || 0) >= 50){
+      MP.lastPos = pos; MP.lastPosAt = tNow; mpPublish({ x:Math.round(player.x), y:Math.round(player.y) });
+    }
+    const t = Math.floor(runTime*2)/2;
+    if (t !== MP.lastT){ MP.lastT = t; mpPublish({ t }); }
+  }
+  if (frameNo % 12 === 0) checkEnd();
+}
+const roundPlayers = peers => peers.filter(p => p.presence && p.presence.gid === MP.game.id);
+function checkEnd(){
+  if (!MP.rm || !MP.game || MP.ended || MP.simT < 1) return;
+  const peers = MP.rm.peers(), P = roundPlayers(peers);
+  const alive = P.filter(p => p.presence.st === 'play');
+  ui.alive.textContent = P.length > 1 ? `${alive.length} of ${P.length} players left` : '';
+  // with friends: the last one standing wins. Alone: play until you are out.
+  const over = P.length >= 2 ? alive.length <= 1 : alive.length === 0;
+  if (over || (!P.length && !MP.participant)) endRound();
+}
+function endRound(){
+  MP.ended = true; state = 'results';
+  if (MP.participant && me.alive) mpPublish({ st:'done', t:+runTime.toFixed(1) });
+  ui.results.hidden = false;
+  renderResults(MP.rm ? MP.rm.peers() : []);
+}
+function renderResults(peers){
+  const P = roundPlayers(peers).slice().sort((a, b) => {
+    const sa = a.presence.st !== 'out' ? 1 : 0, sb = b.presence.st !== 'out' ? 1 : 0;
+    return sb - sa || (+b.presence.t || 0) - (+a.presence.t || 0);
+  });
+  ui.resList.innerHTML = '';
+  P.forEach((p, k) => {
+    const q = p.presence, li = document.createElement('li');
+    const t = (+q.t || 0).toFixed(1);
+    li.textContent = `${k + 1}. ${peerName(q)}${p.sameTab ? ' (you)' : ''}: ${t} s` +
+      (k === 0 && P.length > 1 ? ' (winner)' : '');
+    ui.resList.append(li);
+  });
+  const top = P[0];
+  ui.resTitle.textContent = P.length > 1 && top ? (top.sameTab ? 'You win!' : `${peerName(top.presence)} wins!`) : 'Round over';
+  const hp = hostOf(peers), iAmHost = !!(hp && hp.sameTab);
+  ui.resAgain.hidden = !iAmHost; ui.resWait.hidden = iAmHost;
+  ui.resWait.textContent = hp ? 'Waiting for the host to start the next round…' : 'The host has left the game.';
+}
+
+ui.mpBtn.addEventListener('click', showLobby);
+ui.createBtn.addEventListener('click', () => joinRoom(randCode(4), true));
+ui.joinBtn.addEventListener('click', () => {
+  const code = ui.codeIn.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (code.length < 3){ ui.lobbyErr.textContent = 'Type the game code your friend sent you.'; return; }
+  joinRoom(code, false);
+});
+ui.codeIn.addEventListener('keydown', e => { if (e.key === 'Enter') ui.joinBtn.click(); });
+ui.mStart.addEventListener('click', hostStartRound);
+ui.resAgain.addEventListener('click', hostStartRound);
+ui.resLeave.addEventListener('click', () => leaveRoom(''));
+ui.lobbyBack.addEventListener('click', () => {
+  if (MP.rm){ leaveRoom(''); return; }
+  ui.lobby.hidden = true; ui.start.hidden = false;
+});
+
+/* ---------- input ---------- */
+// Swipe in the bottom area (or on the graph itself): the dot moves by your finger's motion
+const pad = document.getElementById('pad'), padTouch = document.getElementById('padTouch');
+let drag = null;
+function showTouch(e){
+  if (!drag || drag.el !== pad) return;
+  const r = pad.getBoundingClientRect();
+  padTouch.style.transform = `translate(${e.clientX - r.left}px, ${e.clientY - r.top}px)`;
+  padTouch.classList.add('on');
+}
+function onDown(e){
+  if (state !== 'play') return;
+  drag = { id:e.pointerId, x:e.clientX, y:e.clientY, el:e.currentTarget };
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch(err){}
+  showTouch(e);
+  e.preventDefault();
+}
+function onMove(e){
+  if (state !== 'play' || (MP.on && !me.alive)) return;
+  if (e.pointerType === 'mouse' && !drag && e.currentTarget === cv){
+    player.x = clamp((e.clientX - VX)/VK, 10, W-10); player.y = clamp((e.clientY - VY)/VK, 10, H-10); return;
+  }
+  if (!drag || e.pointerId !== drag.id) return;
+  const g = settings.swipe/VK;
+  player.x = clamp(player.x + (e.clientX - drag.x)*g, 10, W-10);
+  player.y = clamp(player.y + (e.clientY - drag.y)*g, 10, H-10);
+  drag.x = e.clientX; drag.y = e.clientY;
+  showTouch(e);
+}
+function onUp(e){ if (drag && e.pointerId === drag.id){ drag = null; padTouch.classList.remove('on'); } }
+for (const el of [cv, pad]){
+  el.addEventListener('pointerdown', onDown);
+  el.addEventListener('pointermove', onMove);
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointercancel', onUp);
+}
+
+ui.startBtn.addEventListener('click', startRun);
+ui.againBtn.addEventListener('click', startRun);
+ui.pause.addEventListener('click', () => setPaused(true));
+ui.resumeBtn.addEventListener('click', () => setPaused(false));
+document.addEventListener('keydown', e => {
+  if (e.key === 'p' || e.key === 'P' || e.key === 'Escape'){
+    if (MP.on) return;
+    if (state === 'play') setPaused(true); else if (state === 'paused') setPaused(false);
+  }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden){ if (!MP.on) setPaused(true); } else last = performance.now(); });
+
+const mq = window.matchMedia('(prefers-color-scheme: dark)');
+const onTheme = () => { readColors(); drawGrid(); };
+mq.addEventListener ? mq.addEventListener('change', onTheme) : mq.addListener(onTheme);
+new MutationObserver(onTheme).observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+window.addEventListener('resize', resize);
+
+readColors(); resize(); showBest();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawGrid);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
