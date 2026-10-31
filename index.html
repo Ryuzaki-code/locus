@@ -74,14 +74,18 @@ canvas{position:fixed;top:0;left:0;width:100%;height:66.667%;display:block;touch
   font:700 14px/1 "Atkinson Hyperlegible",system-ui,sans-serif;cursor:pointer;
 }
 .pause:focus-visible,.btn:focus-visible,.check input:focus-visible{outline:3px solid var(--c2);outline-offset:3px}
+.pause[hidden]{display:none}
+.pause svg{width:18px;height:18px;display:block;margin:auto}
+.pause.live{background:var(--c4);border-color:var(--c4);color:#fff}
 
 .overlay{
-  position:fixed;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;
+  position:fixed;inset:0;z-index:3;display:flex;align-items:flex-start;justify-content:center;
   padding:calc(env(safe-area-inset-top,0px) + 24px) 20px calc(env(safe-area-inset-bottom,0px) + 24px);
   background:var(--veil);overflow-y:auto;
 }
 .overlay[hidden]{display:none}
 .card{
+  margin:auto 0;   /* centred when it fits; when taller than the screen it starts at the top and scrolls */
   width:100%;max-width:360px;background:var(--card);
   border:1.5px solid var(--ink);border-radius:8px;padding:26px 24px 22px;
   box-shadow:6px 6px 0 var(--grid-major);
@@ -149,6 +153,7 @@ input[type="range"]:focus-visible{outline:3px solid var(--c2);outline-offset:3px
   <div class="lvl"><span id="lvl">Level 1</span><span class="sub" id="spd">Speed 1.00×</span><span class="sub" id="balls"></span><span class="sub" id="alive"></span></div>
   <div class="right">
     <div><div class="time" id="time">0.0 s</div><span class="sub" id="best"></span><span class="sub" id="lives"></span></div>
+    <button class="pause" id="voiceBtn" hidden aria-label="Join voice chat"></button>
     <button class="pause" id="pause" aria-label="Pause">II</button>
   </div>
 </div>
@@ -230,6 +235,7 @@ input[type="range"]:focus-visible{outline:3px solid var(--c2);outline-offset:3px
       </div>
       <button class="btn" id="mStart" hidden style="margin-top:14px">Start game</button>
       <p class="small" id="waitMsg">Waiting for the host to start…</p>
+      <button class="btn2" id="lobbyVoice" hidden>Join voice chat</button>
     </div>
     <p class="small err" id="lobbyErr"></p>
     <button class="btn2" id="lobbyBack">Back</button>
@@ -274,6 +280,7 @@ const ui = {
   startBest:$('startBest'), lives:$('lives'), alive:$('alive'),
   mpBtn:$('mpBtn'), lobby:$('lobby'), lobbyJoin:$('lobbyJoin'), lobbyRoom:$('lobbyRoom'), nick:$('nick'),
   createBtn:$('createBtn'), codeIn:$('codeIn'), joinBtn:$('joinBtn'), watchBtn:$('watchBtn'), codeOut:$('codeOut'), plist:$('plist'),
+  voiceBtn:$('voiceBtn'), lobbyVoice:$('lobbyVoice'),
   hostCtl:$('hostCtl'), mLives:$('mLives'), mLivesVal:$('mLivesVal'), mStart:$('mStart'), waitMsg:$('waitMsg'),
   lobbyErr:$('lobbyErr'), lobbyBack:$('lobbyBack'),
   results:$('results'), resTitle:$('resTitle'), resList:$('resList'), resAgain:$('resAgain'), resWait:$('resWait'), resLeave:$('resLeave')
@@ -877,7 +884,7 @@ function draw(){
       const x = clamp(sp[0], 0, W), y = clamp(sp[1], 0, H);
       drawPlayer(x, y, false);
       drawLives(x, y, Number.isInteger(q.lives) ? clamp(q.lives, 0, 5) : 0);
-      ctx.fillStyle = C.ink; ctx.fillText(String(q.name || 'Player').slice(0,16), x, y - 26*S);
+      ctx.fillStyle = C.ink; ctx.fillText(String(q.name || 'Player').slice(0,16) + (q.voice && !q.vm ? ' 🎙' : ''), x, y - 26*S);
     }
   }
   // you: a white dot inside a ring (it blinks while you can't be hit)
@@ -1030,6 +1037,16 @@ function firebaseLobby(){
           setTimeout(() => { if (subs.has(f)) f({ peers:list(), joined:[], left:[], updated:[] }); }, 0);
           return () => { subs.delete(f); errs.delete(e); };
         },
+        myId:id,
+        // voice chat setup messages: each player has an inbox other phones post into
+        sendSig(to, msg){ return db.ref('rooms/' + code + '/sig/' + to).push(Object.assign({ from:id }, msg)).catch(() => {}); },
+        onSig(fn){
+          const inbox = db.ref('rooms/' + code + '/sig/' + id);
+          inbox.onDisconnect().remove().catch(() => {});
+          const h = snap => { const v = snap.val(); snap.ref.remove().catch(() => {}); if (v) fn(v); };
+          inbox.on('child_added', h);
+          return () => { inbox.off('child_added', h); inbox.remove().catch(() => {}); };
+        },
         leave(){
           listRef.off('value', onVal); connRef.off('value', onConn);
           subs.clear(); errs.clear();
@@ -1102,12 +1119,15 @@ async function joinRoom(code, asHost, asSpec){
   ui.codeOut.textContent = code.toUpperCase();
   showLobby();
   renderPlayers(rm.peers());
+  updateVoiceUI();
 }
 function leaveRoom(msg){
+  voiceOff();
   clearInterval(MP.syncTimer);
   if (MP.unsub){ try { MP.unsub(); } catch(e){} MP.unsub = null; }
   if (MP.rm){ MP.rm.leave().catch(() => {}); MP.rm = null; }
   MP.on = false; MP.game = null; MP.participant = false;
+  updateVoiceUI();
   R = Math.random; resize();
   paths = []; state = 'menu'; player = null;
   ui.hud.classList.remove('on'); ui.results.hidden = true; ui.pause.hidden = false;
@@ -1164,6 +1184,7 @@ function onRoomPeers(change){
     beginRound(g, !MP.spec && hostNow() < g.startAt + 1000);    // players in the room when it starts play; watchers and latecomers watch
   }
   if (state === 'results') renderResults(peers);
+  voiceSync(peers);
 }
 function renderPlayers(peers){
   ui.plist.innerHTML = '';
@@ -1172,7 +1193,8 @@ function renderPlayers(peers){
     const q = p.presence || {};
     if (p.kind !== 'viewer' || q.v !== 1) continue;
     const li = document.createElement('li');
-    li.textContent = peerName(q) + (p.sameTab ? ' (you)' : '') + (hp && p.peer === hp.peer ? ' (host)' : '') + (q.spec ? ' (watching)' : '');
+    li.textContent = peerName(q) + (p.sameTab ? ' (you)' : '') + (hp && p.peer === hp.peer ? ' (host)' : '') + (q.spec ? ' (watching)' : '') +
+      (q.voice ? (q.vm ? ' (voice muted)' : ' (voice on)') : '');
     ui.plist.append(li);
   }
   const iAmHost = !!(hp && hp.sameTab);
@@ -1289,6 +1311,118 @@ ui.lobbyBack.addEventListener('click', () => {
   if (MP.rm){ leaveRoom(''); return; }
   ui.lobby.hidden = true; ui.start.hidden = false;
 });
+
+/* ---------- voice chat (website and app, through Firebase) ---------- */
+// Everyone who turns voice on connects straight to each other's phone (WebRTC). Firebase only
+// carries the short setup messages between phones; the voices themselves travel phone to phone.
+const VOICE = { on:false, muted:false, stream:null, pcs:new Map(), audio:new Map(), pend:new Map(), tries:new Map(), unsubSig:null };
+const ICE = { iceServers:[{ urls:['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+const MIC_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+const MIC_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/></svg>';
+const voiceAvailable = () => MP.transport === 'firebase' && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) &&
+                             typeof RTCPeerConnection === 'function';
+
+function updateVoiceUI(){
+  const show = MP.on && !!MP.rm && voiceAvailable() && typeof MP.rm.sendSig === 'function';
+  ui.voiceBtn.hidden = !show; ui.lobbyVoice.hidden = !show;
+  const label = !VOICE.on ? 'Join voice chat' : VOICE.muted ? 'Voice: muted (tap to talk)' : 'Voice: on (tap to mute)';
+  ui.lobbyVoice.textContent = label;
+  ui.voiceBtn.innerHTML = VOICE.on && !VOICE.muted ? MIC_ON : MIC_OFF;
+  ui.voiceBtn.setAttribute('aria-label', label);
+  ui.voiceBtn.classList.toggle('live', VOICE.on && !VOICE.muted);
+}
+async function voiceToggle(){
+  if (!MP.rm || !voiceAvailable()) return;
+  if (!VOICE.on){
+    try {
+      VOICE.stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }, video:false });
+    } catch(e){ toast('No microphone', 'allow the microphone to use voice chat'); return; }
+    VOICE.on = true; VOICE.muted = false; VOICE.tries.clear();
+    VOICE.unsubSig = MP.rm.onSig(onSignal);
+    mpPublish({ voice:true, vm:false });
+    voiceSync(MP.rm.peers());
+  } else {
+    VOICE.muted = !VOICE.muted;
+    VOICE.stream.getAudioTracks().forEach(t => { t.enabled = !VOICE.muted; });
+    mpPublish({ vm:VOICE.muted });
+  }
+  updateVoiceUI();
+}
+function voiceOff(){
+  for (const p of [...VOICE.pcs.keys()]) closePeer(p);
+  if (VOICE.stream) VOICE.stream.getTracks().forEach(t => t.stop());
+  if (VOICE.unsubSig){ try { VOICE.unsubSig(); } catch(e){} VOICE.unsubSig = null; }
+  VOICE.on = false; VOICE.muted = false; VOICE.stream = null;
+  updateVoiceUI();
+}
+function closePeer(peer){
+  const pc = VOICE.pcs.get(peer);
+  if (pc){ try { pc.close(); } catch(e){} VOICE.pcs.delete(peer); }
+  const a = VOICE.audio.get(peer);
+  if (a){ a.srcObject = null; a.remove(); VOICE.audio.delete(peer); }
+  VOICE.pend.delete(peer);
+}
+// one connection per pair of voice players; the player with the smaller id makes the call
+function makePC(peer, offerer){
+  const pc = new RTCPeerConnection(ICE);
+  VOICE.pcs.set(peer, pc);
+  VOICE.stream.getTracks().forEach(t => pc.addTrack(t, VOICE.stream));
+  pc.onicecandidate = e => { if (e.candidate) MP.rm.sendSig(peer, { type:'ice', c:JSON.parse(JSON.stringify(e.candidate)) }); };
+  pc.ontrack = e => {
+    let a = VOICE.audio.get(peer);
+    if (!a){ a = document.createElement('audio'); a.autoplay = true; a.setAttribute('playsinline', ''); document.body.appendChild(a); VOICE.audio.set(peer, a); }
+    a.srcObject = e.streams[0];
+    const p = a.play(); if (p && p.catch) p.catch(() => {});
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed'){ closePeer(peer); if (MP.rm) voiceSync(MP.rm.peers()); }
+  };
+  if (offerer){
+    pc.createOffer()
+      .then(o => pc.setLocalDescription(o))
+      .then(() => MP.rm.sendSig(peer, { type:'offer', sdp:pc.localDescription.sdp }))
+      .catch(() => closePeer(peer));
+  }
+  return pc;
+}
+async function flushIce(peer, pc){
+  const q = VOICE.pend.get(peer) || []; VOICE.pend.delete(peer);
+  for (const c of q){ try { await pc.addIceCandidate(c); } catch(e){} }
+}
+async function onSignal(m){
+  if (!VOICE.on || !m || typeof m.from !== 'string' || typeof m.type !== 'string') return;
+  let pc = VOICE.pcs.get(m.from);
+  try {
+    if (m.type === 'offer' && typeof m.sdp === 'string'){
+      if (pc) closePeer(m.from);
+      pc = makePC(m.from, false);
+      await pc.setRemoteDescription({ type:'offer', sdp:m.sdp });
+      await flushIce(m.from, pc);
+      const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
+      MP.rm.sendSig(m.from, { type:'answer', sdp:pc.localDescription.sdp });
+    } else if (m.type === 'answer' && pc && typeof m.sdp === 'string'){
+      await pc.setRemoteDescription({ type:'answer', sdp:m.sdp });
+      await flushIce(m.from, pc);
+    } else if (m.type === 'ice' && m.c && typeof m.c === 'object'){
+      if (pc && pc.remoteDescription) await pc.addIceCandidate(m.c);
+      else { const q = VOICE.pend.get(m.from) || []; q.push(m.c); VOICE.pend.set(m.from, q); }
+    }
+  } catch(e){ console.warn('voice', e); }
+}
+// keep the voice connections matching who is in the room with voice on
+function voiceSync(peers){
+  if (!VOICE.on || !MP.rm) return;
+  const mine = MP.rm.myId, live = new Set();
+  for (const p of peers){
+    if (p.sameTab || !p.presence || p.presence.voice !== true) continue;
+    live.add(p.peer);
+    const n = VOICE.tries.get(p.peer) || 0;
+    if (!VOICE.pcs.has(p.peer) && mine < p.peer && n < 3){ VOICE.tries.set(p.peer, n + 1); makePC(p.peer, true); }
+  }
+  for (const peer of [...VOICE.pcs.keys()]) if (!live.has(peer)) closePeer(peer);
+}
+ui.voiceBtn.addEventListener('click', voiceToggle);
+ui.lobbyVoice.addEventListener('click', voiceToggle);
 
 /* ---------- input ---------- */
 // Swipe in the bottom area (or on the graph itself): the dot moves by your finger's motion
