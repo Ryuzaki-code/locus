@@ -644,6 +644,7 @@ function showBest(){
 
 function startRun(){
   if (MP.on) return;
+  countStat('solo');
   R = Math.random;
   paths = []; runTime = 0; level = 1; lastLevel = 1; spawnTimer = .4; hitBy = null;
   me.lives = settings.lives; me.alive = true; me.inv = 0;
@@ -997,6 +998,7 @@ function firebaseLobby(){
     async join(name){
       const code = name.replace(/^locus-/, '');
       const db = await withTimeout(fbDb(), 15000);
+      if (typeof db.goOnline === 'function') db.goOnline();
       const id = randCode(14);
       const listRef = db.ref('rooms/' + code + '/peers'), meRef = listRef.child(id);
       let others = {};
@@ -1229,6 +1231,7 @@ function beginRound(g, playing){
   player = { x:VW*(i + 1)/(n + 1), y:VH*.78 };
   me.lives = g.lives; me.alive = playing; me.inv = 0;
   trails.clear();
+  countStat(playing ? 'online' : 'watched');
   state = 'countdown';
   ui.hud.classList.add('on'); ui.pause.hidden = true;
   mpPublish({ gid:playing ? g.id : null, st:playing ? 'play' : 'watch', lives:playing ? me.lives : null, t:0,
@@ -1311,6 +1314,36 @@ ui.lobbyBack.addEventListener('click', () => {
   if (MP.rm){ leaveRoom(''); return; }
   ui.lobby.hidden = true; ui.start.hidden = false;
 });
+
+/* ---------- play counter (anonymous) ---------- */
+// Counts how often Locus is opened and played: no names, no personal data, just numbers.
+// They appear in the Firebase console under Realtime Database → Data → stats.
+// The connection is opened only to add to a counter, then closed again, so solo players
+// don't take up any of the free plan's live connections.
+let statsPending = 0;
+function countStat(key){
+  if (window.claude) return;                    // inside Claude the game can't reach Firebase
+  fbDb().then(db => {
+    const fb = window.firebase;
+    if (!fb || !fb.database || !fb.database.ServerValue) return;
+    const inc = fb.database.ServerValue.increment(1);
+    const day = new Date().toLocaleDateString('en-CA');      // e.g. 2026-11-01, the phone's own date
+    statsPending++; if (db.goOnline) db.goOnline();
+    const done = () => { if (--statsPending === 0 && !MP.rm && db.goOffline) db.goOffline(); };
+    Promise.all([
+      db.ref('stats/total/' + key).set(inc).catch(() => {}),
+      db.ref('stats/days/' + day + '/' + key).set(inc).catch(() => {}),
+    ]).then(done, done);
+  }).catch(() => {});
+}
+(function countOpen(){
+  const day = new Date().toLocaleDateString('en-CA');
+  let seen = null, last = null;
+  try { seen = localStorage.getItem('locus-seen'); last = localStorage.getItem('locus-day'); } catch(e){}
+  countStat('opens');
+  if (!seen){ try { localStorage.setItem('locus-seen', '1'); } catch(e){} countStat('players'); }
+  if (last !== day){ try { localStorage.setItem('locus-day', day); } catch(e){} countStat('dayplayers'); }
+})();
 
 /* ---------- voice chat (website and app, through Firebase) ---------- */
 // Everyone who turns voice on connects straight to each other's phone (WebRTC). Firebase only
