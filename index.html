@@ -100,7 +100,7 @@ canvas{position:fixed;top:0;left:0;width:100%;height:66.667%;display:block;touch
 .settings{margin:16px 0 18px;display:grid;gap:14px}
 .setlabel{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;margin-bottom:6px}
 .setlabel b{font-variant-numeric:tabular-nums}
-.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1.5px solid var(--ink);border-radius:8px;overflow:hidden}
+.seg{display:grid;grid-template-columns:repeat(2,1fr);border:1.5px solid var(--ink);border-radius:8px;overflow:hidden}
 .seg label{position:relative;cursor:pointer}
 .seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
 .seg span{display:block;text-align:center;padding:9px 4px;font-size:15px}
@@ -166,9 +166,8 @@ input[type="range"]:focus-visible{outline:3px solid var(--c2);outline-offset:3px
         <div>
           <span class="setlabel" id="linesLabel">Curve lines</span>
           <div class="seg" role="radiogroup" aria-labelledby="linesLabel">
-            <label><input type="radio" name="lines" value="off"><span>Off</span></label>
-            <label><input type="radio" name="lines" value="ahead" checked><span>Ahead</span></label>
-            <label><input type="radio" name="lines" value="full"><span>Full</span></label>
+            <label><input type="radio" name="lines" value="off" checked><span>Off</span></label>
+            <label><input type="radio" name="lines" value="trace"><span>Trace</span></label>
           </div>
         </div>
         <div>
@@ -188,7 +187,7 @@ input[type="range"]:focus-visible{outline:3px solid var(--c2);outline-offset:3px
     </div>
     <button class="btn" id="startBtn">Start</button>
     <button class="btn2" id="mpBtn" hidden>Play with friends</button>
-    <p class="small" id="mpNote" hidden style="margin:12px 0 0">Playing with friends online works in the Locus Android app.</p>
+    <p class="small" id="mpNote" hidden style="margin:12px 0 0">To play or watch with friends online, open <a href="https://ryuzaki-code.github.io/locus/" target="_blank" rel="noopener" style="color:inherit;font-weight:700">ryuzaki-code.github.io/locus</a> on each phone.</p>
     <p class="small" id="startBest" style="margin:12px 0 0"></p>
   </div>
 </div>
@@ -214,6 +213,8 @@ input[type="range"]:focus-visible{outline:3px solid var(--c2);outline-offset:3px
         <input class="txt" id="codeIn" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="Code" aria-label="Game code">
         <button class="btn2" id="joinBtn">Join</button>
       </div>
+      <button class="btn2" id="watchBtn">Just watch</button>
+      <p class="small" style="margin:6px 0 0">Watchers see every player and ball live but don’t play.</p>
     </div>
     <div id="lobbyRoom" hidden>
       <p class="small" style="margin:0">Game code</p>
@@ -272,7 +273,7 @@ const ui = {
   overTitle:$('overTitle'), overEq:$('overEq'), overText:$('overText'),
   startBest:$('startBest'), lives:$('lives'), alive:$('alive'),
   mpBtn:$('mpBtn'), lobby:$('lobby'), lobbyJoin:$('lobbyJoin'), lobbyRoom:$('lobbyRoom'), nick:$('nick'),
-  createBtn:$('createBtn'), codeIn:$('codeIn'), joinBtn:$('joinBtn'), codeOut:$('codeOut'), plist:$('plist'),
+  createBtn:$('createBtn'), codeIn:$('codeIn'), joinBtn:$('joinBtn'), watchBtn:$('watchBtn'), codeOut:$('codeOut'), plist:$('plist'),
   hostCtl:$('hostCtl'), mLives:$('mLives'), mLivesVal:$('mLivesVal'), mStart:$('mStart'), waitMsg:$('waitMsg'),
   lobbyErr:$('lobbyErr'), lobbyBack:$('lobbyBack'),
   results:$('results'), resTitle:$('resTitle'), resList:$('resList'), resAgain:$('resAgain'), resWait:$('resWait'), resLeave:$('resLeave')
@@ -571,10 +572,11 @@ let hitBy = null;
 let best = 0;
 try { best = parseFloat(localStorage.getItem('locus-best')) || 0; } catch(e) { best = 0; }
 
-const settings = { lines:'ahead', maxBalls:25, swipe:1.6, labels:false, lives:3, players:2 };
+const settings = { lines:'off', maxBalls:25, swipe:1.6, labels:false, lives:3, players:2 };
 try {
   const s = JSON.parse(localStorage.getItem('locus-settings') || '{}');
-  if (['off','ahead','full'].includes(s.lines)) settings.lines = s.lines;
+  if (s.lines === 'off') settings.lines = 'off';
+  else if (s.lines === 'trace' || s.lines === 'full') settings.lines = 'trace';     // older choices map onto the two modes
   if (s.maxBalls >= 3 && s.maxBalls <= 60) settings.maxBalls = Math.round(s.maxBalls);
   if (s.swipe >= 1 && s.swipe <= 3) settings.swipe = Math.round(s.swipe*10)/10;
   if (typeof s.labels === 'boolean') settings.labels = s.labels;
@@ -761,6 +763,50 @@ function drawPlayer(x, y, mine){
   ctx.beginPath(); ctx.arc(x, y, 6*S, 0, Math.PI*2);
   ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#111'; ctx.stroke();
 }
+// Friends' balls glide smoothly: each position update carries a time stamp on the shared clock,
+// and a friend's ball is drawn a little in the past, blended between the two updates around that
+// moment. How far in the past adapts to the connection: just enough to cover how late updates arrive.
+const trails = new Map();
+function smoothPos(peer, q){
+  if (typeof q.ts !== 'number') return [q.x, q.y];
+  let tr = trails.get(peer);
+  if (!tr){ tr = { pts:[], late:120, d:160 }; trails.set(peer, tr); }
+  const pts = tr.pts, last = pts[pts.length - 1], now = hostNow();
+  if (!last || q.ts > last.t){
+    // after a pause (no updates while standing still), hold the old spot until just before the new one
+    if (last && q.ts - last.t > 200) pts.push({ t:q.ts - 33, x:last.x, y:last.y });
+    pts.push({ t:q.ts, x:q.x, y:q.y });
+    while (pts.length > 60) pts.shift();
+    // how late this update arrived; remember the worst recently, letting it shrink slowly
+    tr.late = Math.max(now - q.ts, tr.late*.995);
+  }
+  tr.d += (clamp(tr.late + 40, 100, 450) - tr.d)*.05;   // ease the delay so the ball never jumps when it changes
+  const rt = now - tr.d;
+  if (rt <= pts[0].t) return [pts[0].x, pts[0].y];
+  for (let i = pts.length - 1; i > 0; i--){
+    const a = pts[i-1], b = pts[i];
+    if (rt >= a.t && rt <= b.t){ const k = (rt - a.t)/((b.t - a.t) || 1); return [a.x + (b.x - a.x)*k, a.y + (b.y - a.y)*k]; }
+  }
+  const e = pts[pts.length - 1];
+  return [e.x, e.y];
+}
+// a friend's lives: small dots spaced evenly around their ball, so the shape shows the count
+// (2 side by side, 3 a triangle, 4 a square, 5 a pentagon)
+function drawLives(x, y, n){
+  if (n < 1) return;
+  const r = 16*S, a0 = -Math.PI/2 + (n % 2 === 0 ? Math.PI/n : 0);
+  const pts = [];
+  for (let k = 0; k < n; k++){ const a = a0 + 2*Math.PI*k/n; pts.push([x + r*Math.cos(a), y + r*Math.sin(a)]); }
+  const a = ctx.globalAlpha;
+  if (n >= 3){
+    ctx.beginPath();
+    pts.forEach(([px, py], k) => k ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+    ctx.closePath();
+    ctx.globalAlpha = a*.35; ctx.strokeStyle = C.beads[0]; ctx.lineWidth = 1.2; ctx.stroke(); ctx.globalAlpha = a;
+  }
+  ctx.fillStyle = C.beads[0];
+  for (const [px, py] of pts){ ctx.beginPath(); ctx.arc(px, py, 3*S, 0, Math.PI*2); ctx.fill(); }
+}
 function draw(){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.drawImage(gridCv, 0, 0);
@@ -776,13 +822,12 @@ function draw(){
     const col = C.beads[p.color];
     const lead = p.beads[0].d, tail = p.beads[p.beads.length-1].d;
     ctx.strokeStyle = col;
-    // the part already plotted, behind the beads
-    ctx.globalAlpha = .22; ctx.lineWidth = 2;
-    ctx.beginPath(); strokeRange(p, tail - 220, lead); ctx.stroke();
-    // the whole curve, start to finish
-    if (mode === 'full'){
-      ctx.globalAlpha = .4; ctx.lineWidth = 2;
-      ctx.beginPath(); strokeRange(p, 0, p.total); ctx.stroke();
+    // Off: no lines at all, just the balls.
+    // Trace: the curve's graph is drawn behind its lead ball, from where it came in up to the ball,
+    // like a pen plotting the locus as it moves.
+    if (mode === 'trace'){
+      ctx.globalAlpha = .45; ctx.lineWidth = 2;
+      ctx.beginPath(); strokeRange(p, 0, lead); ctx.stroke();
     }
     // where the curve is heading, fading out
     if (mode === 'ahead'){
@@ -828,9 +873,11 @@ function draw(){
       if (pr.sameTab) continue;
       const q = pr.presence || {};
       if (q.gid !== MP.game.id || q.st === 'out' || typeof q.x !== 'number' || typeof q.y !== 'number') continue;
-      const x = clamp(q.x, 0, W), y = clamp(q.y, 0, H);
+      const sp = smoothPos(pr.peer, q);
+      const x = clamp(sp[0], 0, W), y = clamp(sp[1], 0, H);
       drawPlayer(x, y, false);
-      ctx.fillStyle = C.ink; ctx.fillText(String(q.name || 'Player').slice(0,16), x, y - 11*S);
+      drawLives(x, y, Number.isInteger(q.lives) ? clamp(q.lives, 0, 5) : 0);
+      ctx.fillStyle = C.ink; ctx.fillText(String(q.name || 'Player').slice(0,16), x, y - 26*S);
     }
   }
   // you: a white dot inside a ring (it blinks while you can't be hit)
@@ -1023,7 +1070,7 @@ function readName(){
   try { localStorage.setItem('locus-name', n); } catch(e){}
   return n;
 }
-async function joinRoom(code, asHost){
+async function joinRoom(code, asHost, asSpec){
   ui.lobbyErr.textContent = 'Connecting…';
   let rm;
   try { rm = await MP.lobby.join('locus-' + code); }
@@ -1035,6 +1082,7 @@ async function joinRoom(code, asHost){
   }
   ui.lobbyErr.textContent = '';
   MP.rm = rm; MP.code = code; MP.name = readName(); MP.game = null; MP.playedId = null; MP.starting = false;
+  MP.spec = !!asSpec;
   MP.on = true; resize();
   paths = []; state = 'menu';
   // Inside Claude: measure the gap between this phone's clock and the host's, keeping the best.
@@ -1049,7 +1097,7 @@ async function joinRoom(code, asHost){
       MP.syncN++; MP.syncT0 = Date.now(); mpPublish({ sync:{ n:MP.syncN, t0:MP.syncT0 } });
     }
   }, 1200);
-  mpPublish({ v:1, name:MP.name, host:asHost, st:'lobby', gid:null, x:null, y:null, lives:null, t:0, need:asHost ? settings.players : null });
+  mpPublish({ v:1, name:MP.name, host:asHost, spec:MP.spec, st:MP.spec ? 'watch' : 'lobby', gid:null, x:null, y:null, lives:null, t:0, need:asHost ? settings.players : null });
   MP.unsub = rm.onPeers(onRoomPeers, () => leaveRoom('The connection to the game was lost.'));
   ui.codeOut.textContent = code.toUpperCase();
   showLobby();
@@ -1113,7 +1161,7 @@ function onRoomPeers(change){
   const g = hp && hp.presence.game;
   if (validGame(g) && g.id !== MP.playedId){
     MP.playedId = g.id;
-    beginRound(g, hostNow() < g.startAt + 1000);    // everyone in the game when it starts plays; latecomers watch
+    beginRound(g, !MP.spec && hostNow() < g.startAt + 1000);    // players in the room when it starts play; watchers and latecomers watch
   }
   if (state === 'results') renderResults(peers);
 }
@@ -1124,17 +1172,18 @@ function renderPlayers(peers){
     const q = p.presence || {};
     if (p.kind !== 'viewer' || q.v !== 1) continue;
     const li = document.createElement('li');
-    li.textContent = peerName(q) + (p.sameTab ? ' (you)' : '') + (hp && p.peer === hp.peer ? ' (host)' : '');
+    li.textContent = peerName(q) + (p.sameTab ? ' (you)' : '') + (hp && p.peer === hp.peer ? ' (host)' : '') + (q.spec ? ' (watching)' : '');
     ui.plist.append(li);
   }
   const iAmHost = !!(hp && hp.sameTab);
   ui.hostCtl.hidden = !iAmHost; ui.mStart.hidden = true; ui.waitMsg.hidden = false;
   if (!hp){ ui.waitMsg.textContent = 'Waiting for the host to join…'; return; }
   const joined = lobbyCount(peers), need = needOf(hp);
-  ui.waitMsg.textContent = joined >= need ? 'Everyone’s here, starting…'
-    : `Waiting for players: ${joined} of ${need} joined. The game starts by itself when everyone is in.`;
+  ui.waitMsg.textContent = (MP.spec ? 'You’re watching. ' : '') + (joined >= need ? 'Everyone’s here, starting…'
+    : `Waiting for players: ${joined} of ${need} joined. The game starts by itself when everyone is in.`);
 }
-const lobbyCount = peers => peers.filter(p => p.kind === 'viewer' && p.presence && p.presence.v === 1).length;
+const lobbyCount = peers => peers.filter(p => p.kind === 'viewer' && p.presence && p.presence.v === 1 && !p.presence.spec).length;
+const watchCount = peers => peers.filter(p => p.kind === 'viewer' && p.presence && p.presence.v === 1 && p.presence.spec).length;
 const needOf = hp => { const n = hp && hp.presence && hp.presence.need; return Number.isInteger(n) && n >= 2 && n <= 8 ? n : 2; };
 // the host starts a round: a fresh seed, and a start time 3.5 s from now for the countdown
 function hostStartRound(){
@@ -1157,10 +1206,11 @@ function beginRound(g, playing){
   const i = meP ? Math.max(0, ids.indexOf(meP.peer)) : 0, n = Math.max(1, ids.length);
   player = { x:VW*(i + 1)/(n + 1), y:VH*.78 };
   me.lives = g.lives; me.alive = playing; me.inv = 0;
+  trails.clear();
   state = 'countdown';
   ui.hud.classList.add('on'); ui.pause.hidden = true;
   mpPublish({ gid:playing ? g.id : null, st:playing ? 'play' : 'watch', lives:playing ? me.lives : null, t:0,
-              x:playing ? Math.round(player.x) : null, y:playing ? Math.round(player.y) : null });
+              x:playing ? Math.round(player.x) : null, y:playing ? Math.round(player.y) : null, ts:Math.round(hostNow()) });
   updateHud();
 }
 // every frame: run the shared simulation up to "now", in fixed 1/60 s steps
@@ -1173,9 +1223,9 @@ function mpFrame(){
   if (state !== 'play') return;
   if (MP.participant && me.alive){
     const pos = Math.round(player.x) + ',' + Math.round(player.y), tNow = performance.now();
-    // send your position up to 20 times a second
-    if (pos !== MP.lastPos && tNow - (MP.lastPosAt || 0) >= 50){
-      MP.lastPos = pos; MP.lastPosAt = tNow; mpPublish({ x:Math.round(player.x), y:Math.round(player.y) });
+    // send your position up to 30 times a second, stamped with the shared clock
+    if (pos !== MP.lastPos && tNow - (MP.lastPosAt || 0) >= 33){
+      MP.lastPos = pos; MP.lastPosAt = tNow; mpPublish({ x:Math.round(player.x), y:Math.round(player.y), ts:Math.round(hostNow()) });
     }
     const t = Math.floor(runTime*2)/2;
     if (t !== MP.lastT){ MP.lastT = t; mpPublish({ t }); }
@@ -1187,7 +1237,8 @@ function checkEnd(){
   if (!MP.rm || !MP.game || MP.ended || MP.simT < 1) return;
   const peers = MP.rm.peers(), P = roundPlayers(peers);
   const alive = P.filter(p => p.presence.st === 'play');
-  ui.alive.textContent = P.length > 1 ? `${alive.length} of ${P.length} players left` : '';
+  const w = watchCount(peers);
+  ui.alive.textContent = (P.length > 1 ? `${alive.length} of ${P.length} players left` : '') + (w ? `${P.length > 1 ? ', ' : ''}${w} watching` : '');
   // with friends: the last one standing wins. Alone: play until you are out.
   const over = P.length >= 2 ? alive.length <= 1 : alive.length === 0;
   if (over || (!P.length && !MP.participant)) endRound();
@@ -1220,6 +1271,11 @@ function renderResults(peers){
 
 ui.mpBtn.addEventListener('click', showLobby);
 ui.createBtn.addEventListener('click', () => joinRoom(randCode(4), true));
+ui.watchBtn.addEventListener('click', () => {
+  const code = ui.codeIn.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (code.length < 3){ ui.lobbyErr.textContent = 'Type the code of the game you want to watch.'; return; }
+  joinRoom(code, false, true);
+});
 ui.joinBtn.addEventListener('click', () => {
   const code = ui.codeIn.value.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (code.length < 3){ ui.lobbyErr.textContent = 'Type the game code your friend sent you.'; return; }
